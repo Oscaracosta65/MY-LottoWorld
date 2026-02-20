@@ -286,6 +286,8 @@ if ($id > 0) {
         exit;
     }
 
+    // Save prediction settings as a named template (hardened: use Joomla input filtering)
+    if ($app->input->post->get('save_setting_template', '', 'STRING') !== '') {
         $settingName = trim($app->input->post->getString('setting_name', ''));
         $source      = $app->input->post->getString('source', '');
         $lotteryId   = $app->input->post->getInt('lottery_id', 0);
