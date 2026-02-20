@@ -5030,6 +5030,8 @@ document.addEventListener('DOMContentLoaded', function() {
   ? window.S
   : (function(str) { return String(str).replace(/\[\[/g, '<').replace(/\]\]/g, '>'); });
 
+try { // [SKAI-GUARD] Catch errors so they don't prevent collapse/snapshot (in separate script)
+
 // =========================================================
 // SKAI Lottery Navigator (pill row)
 // =========================================================
@@ -7441,14 +7443,26 @@ function convertTimestampsToLocal() {
 // Run timestamp conversion after DOM is ready
 convertTimestampsToLocal();
 
+} catch(e) { /* [SKAI-GUARD] Main script error caught - collapse and snapshot run in separate script */ if (window.console && console.error) { console.error('[SKAI] Main script error:', e); } }
+
+// close the top-level DOMContentLoaded wrapper opened at the start of this script
+});
+
+[[/script]]
+
+<!-- [SKAI-ISOLATED] Collapse toggle + Global Snapshot in their own script, immune to main script errors -->
+[[script]]
+document.addEventListener('DOMContentLoaded', function() {
+
+// =========================================================
 // Lottery section collapse/expand functionality
 // Persists state in localStorage per lottery
-// Lottery section collapse -- event delegation (works regardless of DOM order)
+// =========================================================
 document.addEventListener('click', function(ev) {
   var btn = ev.target ? ev.target.closest('.lottery-collapse-toggle') : null;
   if (!btn) return;
 
-  var group = btn.closest('.lottery-group');
+  var group = btn.closest ? btn.closest('.lottery-group') : null;
   if (!group) return;
 
   var lotteryId = group.getAttribute('data-lottery-id') || '';
@@ -7479,7 +7493,6 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
   try {
     var stored = localStorage.getItem('lottery_collapsed_' + lotteryId);
     if (stored === 'false') {
-      // User previously expanded this lottery: restore expanded state
       group.classList.remove('collapsed');
       if (toggle) {
         toggle.textContent = 'Collapse';
@@ -7487,7 +7500,6 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
         toggle.setAttribute('aria-label', 'Collapse lottery section');
       }
     }
-    // No stored value or stored = 'true': keep default collapsed (already set in HTML)
   } catch(e) {}
 });
 
@@ -7511,33 +7523,24 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
   var methodHits = {};
   var bestLotteryName = '';
   var bestLotteryOverlap = -1;
-  var prevTotal = 0;
 
   Array.prototype.forEach.call(groups, function(group) {
-    // Count compare checkboxes (evidence)
     var boxes = group.querySelectorAll('.card-compare-checkbox');
-    var runCount = boxes.length;
-    allEvidence += runCount;
+    allEvidence += boxes.length;
 
-    // Count match pills as a proxy for agreement signal
     var matches = group.querySelectorAll('.match-pill:not(.extra)');
     var overlap = matches.length;
     allOverlap += overlap;
 
-    // Per-method hit counts
     var cols = group.querySelectorAll('.prediction-column');
-    var maxMethodHits = 0;
-    var maxMethodLabel = '';
     Array.prototype.forEach.call(cols, function(col) {
       var badge = col.querySelector('.source-badge');
       var label = badge ? (badge.textContent || '').trim().replace(/\s+/g,' ') : '';
-      if (!label) return; // skip columns with no method label
+      if (!label) return;
       var hits = col.querySelectorAll('.match-pill:not(.extra)').length;
       methodHits[label] = (methodHits[label] || 0) + hits;
-      if (hits > maxMethodHits) { maxMethodHits = hits; maxMethodLabel = label; }
     });
 
-    // Best lottery = highest overlap
     if (overlap > bestLotteryOverlap) {
       bestLotteryOverlap = overlap;
       var nameEls = group.querySelectorAll('.lottery-name');
@@ -7556,12 +7559,13 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
   else if (allOverlap >= 5) signal = 'Structured';
   else if (allOverlap >= 2) signal = 'Emerging';
 
-  // Evidence Depth
+  // Evidence Depth: use saved runs (evidence) if no match pills available
   var evDepth = 'Thin';
   if (allEvidence >= 10) evDepth = 'Stable';
   else if (allEvidence >= 5) evDepth = 'Building';
+  else if (allEvidence > 0) evDepth = 'Building';
 
-  // Trend Direction: compare current overlap to last stored value
+  // Trend Direction
   var trendKey = 'skai_snap_prev_overlap';
   var trendArrow = '\u2192 Flat';
   try {
@@ -7569,38 +7573,34 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
     if (allOverlap > prev + 1) trendArrow = '\u2191 Improving';
     else if (allOverlap < prev - 1) trendArrow = '\u2193 Weakening';
     localStorage.setItem(trendKey, String(allOverlap));
-  } catch(e) { /* localStorage unavailable (private browsing or quota exceeded) */ }
+  } catch(e) { /* localStorage unavailable */ }
 
   // Leading Method
-  var leadMethod = '--';
-  var maxH = 0;
-  // Reusable label truncation helper
   var truncLabel = function(text, max) {
     max = max || 22;
+    if (!text) return '--';
     return text.length > max ? text.slice(0, max - 2) + '...' : text;
   };
+  var leadMethod = '--';
+  var maxH = 0;
   Object.keys(methodHits).forEach(function(k) {
     if (methodHits[k] > maxH) { maxH = methodHits[k]; leadMethod = k; }
   });
-  leadMethod = truncLabel(leadMethod);
 
   // Update DOM
-  if (sigEl) sigEl.textContent = signal;
-  if (evEl) evEl.textContent = evDepth;
+  if (sigEl)  sigEl.textContent  = signal;
+  if (evEl)   evEl.textContent   = evDepth;
   if (trendEl) trendEl.textContent = trendArrow;
-  if (bestLEl) {
-    bestLEl.textContent = truncLabel(bestLotteryName) || '--';
-  }
-  if (bestMEl) bestMEl.textContent = leadMethod;
-  if (cntEl) cntEl.textContent = String(totalLotteries);
+  if (bestLEl) bestLEl.textContent = truncLabel(bestLotteryName);
+  if (bestMEl) bestMEl.textContent = truncLabel(leadMethod);
+  if (cntEl)  cntEl.textContent  = String(totalLotteries);
 
   // Mark best lottery group for focus mode (only the first/single best group)
   if (bestLotteryOverlap >= 0) {
     var winnerMarked = false;
     Array.prototype.forEach.call(groups, function(group) {
       if (winnerMarked) return;
-      var matches2 = group.querySelectorAll('.match-pill:not(.extra)').length;
-      if (matches2 === bestLotteryOverlap) {
+      if (group.querySelectorAll('.match-pill:not(.extra)').length === bestLotteryOverlap) {
         group.classList.add('skai-focus-winner');
         winnerMarked = true;
       }
@@ -7611,7 +7611,6 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
 // =========================================================
 // [SKAI-REF-05] Focus Mode Toggle
 // Note: Focus mode state intentionally does NOT persist across page loads.
-// It is a temporary UI overlay and resets on refresh.
 // =========================================================
 (function initFocusMode(){
   var btn = document.getElementById('skai-focus-btn');
@@ -7634,9 +7633,7 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
   });
 })();
 
-// close the top-level DOMContentLoaded wrapper opened at the start of this script
 });
-
 [[/script]]
 
 <!-- ==================================================
