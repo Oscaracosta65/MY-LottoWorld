@@ -119,6 +119,7 @@ if ($app->input->getMethod() === 'POST') {
         ($app->input->post->get('delete_lottery_predictions', '', 'STRING') !== '') ||
         ($app->input->post->getInt('delete_setting_template', 0) > 0) ||
         ($app->input->post->get('save_setting_template', '', 'STRING') !== '') ||
+        ($app->input->post->get('save_best_settings', '', 'STRING') !== '') ||
         ($app->input->post->get('toggle_new_features', '', 'STRING') !== '') ||
         ($app->input->post->get('change_sort_dir', '', 'STRING') !== '');
 
@@ -212,8 +213,79 @@ if ($id > 0) {
         }
     }
 
-    // Save prediction settings as a named template (hardened: use Joomla input filtering)
-    if ($app->input->post->get('save_setting_template', '', 'STRING') !== '') {
+    // Save prediction run as "Best Settings" template (upsert by lottery+name)
+    if ($app->input->post->get('save_best_settings', '', 'STRING') !== '') {
+        $bsSource    = $app->input->post->getString('bs_source', '');
+        $bsLotteryId = $app->input->post->getInt('bs_lottery_id', 0);
+        $bsRunId     = $app->input->post->getInt('bs_run_id', 0);
+        $bsName      = trim($app->input->post->getString('bs_name', ''));
+
+        if ($bsRunId > 0 && $bsLotteryId > 0 && $bsSource !== '') {
+            // Load the original run to read its settings
+            $rq = $db->getQuery(true)
+                ->select('*')
+                ->from($db->quoteName('#__user_saved_numbers'))
+                ->where($db->quoteName('id')      . ' = ' . (int)$bsRunId)
+                ->where($db->quoteName('user_id') . ' = ' . (int)$user->id);
+            $db->setQuery($rq);
+            $runRow = $db->loadAssoc();
+
+            if ($runRow) {
+                $allKeys = [
+                    'epochs','batch_size','dropout_rate','learning_rate',
+                    'activation_function','hidden_layers','recency_decay',
+                    'skai_window_size','skip_window','draws_used','tuned_window',
+                    'sampling_temperature','diversity_penalty','gap_scale',
+                    'skai_run_mode','auto_tune','tune_used','best_window',
+                    'skai_top_n_numbers','skai_top_n_combos',
+                    'walks','burn_in','laplace_k','decay','chain_len',
+                    'draws_analyzed','freq_weight','skip_weight','hist_weight',
+                ];
+                $bsParams = [];
+                foreach ($allKeys as $k) {
+                    if (isset($runRow[$k]) && $runRow[$k] !== '' && $runRow[$k] !== null) {
+                        $bsParams[$k] = $runRow[$k];
+                    }
+                }
+                if (!$bsName) {
+                    $bsName = 'Best Settings';
+                }
+                // Delete any existing "Best Settings" template for this lottery+source
+                $delQ = $db->getQuery(true)
+                    ->delete($db->quoteName('#__user_saved_settings'))
+                    ->where($db->quoteName('user_id')      . ' = ' . (int)$user->id)
+                    ->where($db->quoteName('lottery_id')   . ' = ' . (int)$bsLotteryId)
+                    ->where($db->quoteName('source')       . ' = ' . $db->quote($bsSource))
+                    ->where($db->quoteName('setting_name') . ' = ' . $db->quote($bsName));
+                $db->setQuery($delQ);
+                try { $db->execute(); } catch (Exception $e) {}
+
+                // Insert the new template
+                if ($bsParams) {
+                    $insQ = $db->getQuery(true)
+                        ->insert($db->quoteName('#__user_saved_settings'))
+                        ->columns(['user_id','lottery_id','source','setting_name','params'])
+                        ->values(implode(',', [
+                            (int)$user->id,
+                            (int)$bsLotteryId,
+                            $db->quote($bsSource),
+                            $db->quote($bsName),
+                            $db->quote(json_encode($bsParams)),
+                        ]));
+                    $db->setQuery($insQ);
+                    try {
+                        $db->execute();
+                        $app->enqueueMessage('Best settings saved as "' . htmlspecialchars($bsName, ENT_QUOTES) . '".', 'message');
+                    } catch (Exception $e) {
+                        $app->enqueueMessage('Failed to save best settings: ' . $e->getMessage(), 'error');
+                    }
+                }
+            }
+        }
+        $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
+        exit;
+    }
+
         $settingName = trim($app->input->post->getString('setting_name', ''));
         $source      = $app->input->post->getString('source', '');
         $lotteryId   = $app->input->post->getInt('lottery_id', 0);
@@ -443,6 +515,157 @@ echo '{loadmoduleid 126}';
   min-width: 160px;
   margin-top: 4px;
 }
+
+/* ── Best Opportunities Panel ── */
+.skai-best-opps {
+  margin: 0 0 1.5rem 0;
+}
+.skai-best-opps__heading {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0A1A33;
+  margin: 0 0 0.2rem 0;
+}
+.skai-best-opps__sub {
+  font-size: 0.85rem;
+  color: #475569;
+  margin: 0 0 1rem 0;
+}
+.skai-best-opps__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.skai-opp-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 1px 4px rgba(10,26,51,0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.skai-opp-card__badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  margin-bottom: 0.15rem;
+}
+.skai-opp-card__badge--agree  { background: #e0f2fe; color: #0369a1; }
+.skai-opp-card__badge--cover  { background: #dcfce7; color: #15803d; }
+.skai-opp-card__badge--rank   { background: #fef3c7; color: #92400e; }
+.skai-opp-card__metric {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0A1A33;
+  line-height: 1.1;
+}
+.skai-opp-card__label {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: -0.15rem;
+}
+.skai-opp-card__def {
+  font-size: 0.78rem;
+  color: #64748b;
+  border-left: 3px solid #e2e8f0;
+  padding-left: 0.5rem;
+  line-height: 1.4;
+}
+.skai-opp-card__numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 0.1rem;
+}
+.skai-opp-card__num {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  color: #0A1A33;
+}
+.skai-opp-card__methods {
+  font-size: 0.75rem;
+  color: #475569;
+}
+.skai-opp-card__why {
+  font-size: 0.78rem;
+  color: #475569;
+  font-style: italic;
+  margin-top: 0.1rem;
+}
+.skai-opp-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 0.35rem;
+}
+.skai-opp-card__cta {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.28rem 0.65rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  line-height: 1.4;
+}
+.skai-opp-card__cta--primary {
+  background: #1C66FF;
+  color: #ffffff;
+}
+.skai-opp-card__cta--primary:hover { background: #1558e0; }
+.skai-opp-card__cta--secondary {
+  background: #f1f5f9;
+  color: #0A1A33;
+  border: 1px solid #e2e8f0;
+}
+.skai-opp-card__cta--secondary:hover { background: #e2e8f0; }
+.skai-opp-card--empty {
+  background: #f8fafc;
+  border-style: dashed;
+}
+.skai-opp-card--empty .skai-opp-card__metric {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+.skai-opp-banner {
+  font-size: 0.78rem;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  margin-top: 0.5rem;
+}
+.skai-opp-banner--warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+/* Lottery header mini-summary */
+.skai-lottery-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 0.75rem;
+  color: #475569;
+  margin-top: 4px;
+}
+.skai-lottery-summary__chip {
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.skai-lottery-summary__chip b { color: #0A1A33; }
+
 
 [[/style]]
 
@@ -1440,6 +1663,128 @@ $modules = array(
     array('key' => 'skai_prediction', 'label' => 'Hybrid Model (skai_prediction)',          'icon' => '', 'tooltip' => 'Combines multiple analytical methods'),
 );
 
+// ──────────────────────────────────────────────────────────────────
+// 6) Compute Best Opportunities per lottery (Agreement / Coverage / Rank Strength)
+//    Results stored in $bestOpps[lottery_id] for rendering below.
+// ──────────────────────────────────────────────────────────────────
+$bestOpps = [];
+foreach ($groups as $groupKey => $g) {
+    $lid = (int)$g['lottery_id'];
+
+    if (!isset($bestOpps[$lid])) {
+        $bestOpps[$lid] = [
+            'lottery_name'    => (string)($g['lottery_name'] ?? ''),
+            'lottery_id'      => $lid,
+            'total_runs'      => 0,
+            'best_agreement'  => ['score' => -1, 'draw_date' => '', 'numbers' => [], 'methods' => [], 'run_id' => 0, 'source' => ''],
+            'best_coverage'   => ['score' => -1, 'draw_date' => '', 'numbers' => [], 'source' => '', 'run_id' => 0],
+            'best_rank'       => ['score' => -1, 'draw_date' => '', 'run_id' => 0, 'source' => '', 'hits' => 0, 'numbers' => []],
+        ];
+    }
+    $bestOpps[$lid]['total_runs'] += count($g['preds']);
+
+    // ── Agreement: count unique numbers that appear in 2+ methods ──
+    $methodNums = [];
+    foreach ($g['preds'] as $s) {
+        $raw = array_filter(array_map('intval', explode(',', (string)($s->main_numbers ?? ''))));
+        foreach ($raw as $n) {
+            if (!isset($methodNums[$n])) $methodNums[$n] = [];
+            $methodNums[$n][] = $s->source;
+        }
+    }
+    $agreedNums = [];
+    $agreedMethodSet = [];
+    foreach ($methodNums as $n => $ms) {
+        $uniq = array_unique($ms);
+        if (count($uniq) >= 2) {
+            $agreedNums[] = $n;
+            foreach ($uniq as $m) $agreedMethodSet[$m] = true;
+        }
+    }
+    $agreementScore = count($agreedNums);
+    // Tie-break: more agreed methods wins; newer draw date wins
+    $prevScore  = $bestOpps[$lid]['best_agreement']['score'];
+    $prevMCount = count($bestOpps[$lid]['best_agreement']['methods']);
+    $currMCount = count($agreedMethodSet);
+    if ($agreementScore > $prevScore || ($agreementScore === $prevScore && $currMCount > $prevMCount)) {
+        // Pick any run in this group as the representative run for "save best"
+        $repRun = $g['preds'][0] ?? null;
+        sort($agreedNums);
+        $bestOpps[$lid]['best_agreement'] = [
+            'score'     => $agreementScore,
+            'draw_date' => (string)$g['draw_date'],
+            'numbers'   => $agreedNums,
+            'methods'   => array_keys($agreedMethodSet),
+            'run_id'    => $repRun ? (int)$repRun->id : 0,
+            'source'    => $repRun ? (string)$repRun->source : '',
+        ];
+    }
+
+    // ── Coverage: individual run with most unique main numbers ──
+    foreach ($g['preds'] as $s) {
+        $nums = array_unique(array_filter(array_map('intval', explode(',', (string)($s->main_numbers ?? '')))));
+        $coverage = count($nums);
+        if ($coverage > $bestOpps[$lid]['best_coverage']['score']) {
+            $bestOpps[$lid]['best_coverage'] = [
+                'score'     => $coverage,
+                'draw_date' => (string)$g['draw_date'],
+                'numbers'   => array_values($nums),
+                'source'    => (string)$s->source,
+                'run_id'    => (int)$s->id,
+            ];
+        }
+    }
+
+    // ── Rank Strength: reward early-rank hits vs actual draw ──
+    // Requires actual draw data from drawMap
+    $normDate = $g['draw_date'];
+    try { $normDate = (new DateTime($g['draw_date']))->format('Y-m-d'); } catch (Exception $e) {}
+    $drawKey = (int)$g['game_id'] . '|' . $normDate;
+    $drawRow = isset($drawMap[$drawKey]) ? $drawMap[$drawKey] : null;
+    if ($drawRow) {
+        $actualNums = [];
+        for ($i = 0; $i < 10; $i++) {
+            $v = isset($drawRow['main_' . $i]) ? (int)$drawRow['main_' . $i] : null;
+            if ($v) $actualNums[] = $v;
+        }
+        if (!empty($actualNums)) {
+            foreach ($g['preds'] as $s) {
+                $predList = array_values(array_filter(array_map('intval', explode(',', (string)($s->main_numbers ?? '')))));
+                $nPred    = count($predList);
+                $rankScore = 0;
+                $hitCount  = 0;
+                foreach ($predList as $pos0 => $n) {
+                    if (in_array($n, $actualNums, true)) {
+                        // Earlier rank = higher score (rank 1 = $nPred points, last = 1 point)
+                        $rankScore += max(1, $nPred - $pos0);
+                        $hitCount++;
+                    }
+                }
+                if ($rankScore > $bestOpps[$lid]['best_rank']['score']) {
+                    $bestOpps[$lid]['best_rank'] = [
+                        'score'     => $rankScore,
+                        'draw_date' => (string)$g['draw_date'],
+                        'run_id'    => (int)$s->id,
+                        'source'    => (string)$s->source,
+                        'hits'      => $hitCount,
+                        'numbers'   => $predList,
+                    ];
+                }
+            }
+        }
+    }
+}
+
+// Method display labels (short) for Best Opportunities display
+$__methodLabels = [
+    'skip_hit'        => 'Pattern Analysis',
+    'ai_prediction'   => 'Neural Network',
+    'mcmc_prediction' => 'Probability Sampling',
+    'skai_prediction' => 'Hybrid Model',
+    'heatmap'         => 'Frequency Map',
+];
+
+
 
 ?>
 
@@ -2220,6 +2565,177 @@ h3.title { font-size: 1.5rem; }
 <?php if (! empty($groups) ): ?>
 
 <!-- ==================================================
+     Best Opportunities Panel
+================================================== -->
+<?php if (!empty($bestOpps)): ?>
+[[div class="skai-best-opps"]]
+  [[h2 class="skai-best-opps__heading"]]Best Opportunities[[/h2]]
+  [[p class="skai-best-opps__sub"]]Your top picks from every lottery you have analyzed — Agreement, Coverage, and Rank Strength explained in plain English.[[/p]]
+  [[div class="skai-best-opps__grid"]]
+  <?php foreach ($bestOpps as $lid => $opp):
+    $oppLotName   = htmlspecialchars($opp['lottery_name'] ?? '', ENT_QUOTES);
+    $totalRuns    = (int)$opp['total_runs'];
+    $bannerClass  = $totalRuns < 2 ? 'skai-opp-banner--warn' : '';
+    $bannerMsg    = $totalRuns < 2
+      ? 'Save 1-2 more runs to improve these recommendations.'
+      : 'More saved runs = better recommendations.';
+  ?>
+  [[div class="skai-opp-card" id="best-opp-<?php echo $lid; ?>"]]
+    [[div style="font-size:0.95rem; font-weight:700; color:#0A1A33; margin-bottom:0.5rem;"]]
+      <?php echo $oppLotName; ?>
+    [[/div]]
+
+    <?php
+    // ── Agreement card ──
+    $ba = $opp['best_agreement'];
+    ?>
+    [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.1rem;"]]
+      [[span class="skai-opp-card__badge skai-opp-card__badge--agree"]]Best Agreement[[/span]]
+      [[div class="skai-opp-card__def"]]Agreement means multiple methods picked the same numbers.[[/div]]
+      <?php if ($ba['score'] > 0): ?>
+        [[div class="skai-opp-card__metric"]]<?php echo (int)$ba['score']; ?> shared number<?php echo $ba['score'] === 1 ? '' : 's'; ?>[[/div]]
+        [[div class="skai-opp-card__label"]]from <?php echo count($ba['methods']); ?> method<?php echo count($ba['methods']) === 1 ? '' : 's'; ?> on <?php echo htmlspecialchars($ba['draw_date'], ENT_QUOTES); ?>[[/div]]
+        <?php if (!empty($ba['methods'])): ?>
+        [[div class="skai-opp-card__methods"]]
+          <?php
+            $mLabels = array_map(function($m) use ($__methodLabels) {
+              return htmlspecialchars($__methodLabels[$m] ?? $m, ENT_QUOTES);
+            }, $ba['methods']);
+            echo implode(', ', $mLabels);
+          ?>
+        [[/div]]
+        <?php endif; ?>
+        <?php if (!empty($ba['numbers'])): ?>
+        [[div class="skai-opp-card__numbers"]]
+          <?php foreach (array_slice($ba['numbers'], 0, 15) as $n): ?>
+            [[span class="skai-opp-card__num"]]<?php echo (int)$n; ?>[[/span]]
+          <?php endforeach; ?>
+          <?php if (count($ba['numbers']) > 15): ?><span style="font-size:0.75rem;color:#94a3b8;">+<?php echo count($ba['numbers'])-15; ?> more</span><?php endif; ?>
+        [[/div]]
+        <?php endif; ?>
+        [[div class="skai-opp-card__why"]]Why: These numbers had the most votes from different methods.[[/div]]
+        <?php if ($ba['run_id'] > 0): ?>
+        [[div class="skai-opp-card__actions"]]
+          [[button type="button" class="skai-opp-card__cta skai-opp-card__cta--primary"
+                   data-use-settings="1"
+                   data-lottery-id="<?php echo $lid; ?>"
+                   data-run-id="<?php echo (int)$ba['run_id']; ?>"
+                   aria-label="Scroll to this lottery section and highlight the best agreement run"]]
+            Use these settings
+          [[/button]]
+          [[form method="post" style="display:inline;"]]
+            <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
+            [[input type="hidden" name="save_best_settings"   value="1"]]
+            [[input type="hidden" name="bs_run_id"            value="<?php echo (int)$ba['run_id']; ?>"]]
+            [[input type="hidden" name="bs_lottery_id"        value="<?php echo $lid; ?>"]]
+            [[input type="hidden" name="bs_source"            value="<?php echo htmlspecialchars($ba['source'], ENT_QUOTES); ?>"]]
+            [[input type="hidden" name="bs_name"              value="Best Settings - <?php echo $oppLotName; ?>"]]
+            [[button type="submit" class="skai-opp-card__cta skai-opp-card__cta--secondary"
+                     onclick="return confirm('Save as Best Settings for <?php echo $oppLotName; ?>? This will overwrite any previous Best Settings for this lottery.');"]]
+              Save as Best Settings
+            [[/button]]
+          [[/form]]
+        [[/div]]
+        <?php endif; ?>
+      <?php else: ?>
+        [[div class="skai-opp-card__metric"]]No overlap yet[[/div]]
+        [[div class="skai-opp-card__label"]]Select multiple methods to see agreement.[[/div]]
+      <?php endif; ?>
+    [[/div]]
+
+    <?php
+    // ── Coverage card ──
+    $bc = $opp['best_coverage'];
+    ?>
+    [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.6rem;"]]
+      [[span class="skai-opp-card__badge skai-opp-card__badge--cover"]]Best Coverage[[/span]]
+      [[div class="skai-opp-card__def"]]Coverage means how many unique numbers your settings produced.[[/div]]
+      <?php if ($bc['score'] > 0): ?>
+        [[div class="skai-opp-card__metric"]]<?php echo (int)$bc['score']; ?> unique number<?php echo $bc['score'] === 1 ? '' : 's'; ?>[[/div]]
+        [[div class="skai-opp-card__label"]]<?php echo htmlspecialchars($__methodLabels[$bc['source']] ?? $bc['source'], ENT_QUOTES); ?> &bull; <?php echo htmlspecialchars($bc['draw_date'], ENT_QUOTES); ?>[[/div]]
+        <?php if (!empty($bc['numbers'])): ?>
+        [[div class="skai-opp-card__numbers"]]
+          <?php foreach (array_slice($bc['numbers'], 0, 12) as $n): ?>
+            [[span class="skai-opp-card__num"]]<?php echo (int)$n; ?>[[/span]]
+          <?php endforeach; ?>
+          <?php if (count($bc['numbers']) > 12): ?><span style="font-size:0.75rem;color:#94a3b8;">+<?php echo count($bc['numbers'])-12; ?> more</span><?php endif; ?>
+        [[/div]]
+        <?php endif; ?>
+        [[div class="skai-opp-card__why"]]Why: This run produced the most unique numbers to choose from.[[/div]]
+        [[div class="skai-opp-card__actions"]]
+          [[button type="button" class="skai-opp-card__cta skai-opp-card__cta--primary"
+                   data-use-settings="1"
+                   data-lottery-id="<?php echo $lid; ?>"
+                   data-run-id="<?php echo (int)$bc['run_id']; ?>"
+                   aria-label="Scroll to this lottery section"]]
+            Use these settings
+          [[/button]]
+          [[form method="post" style="display:inline;"]]
+            <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
+            [[input type="hidden" name="save_best_settings"   value="1"]]
+            [[input type="hidden" name="bs_run_id"            value="<?php echo (int)$bc['run_id']; ?>"]]
+            [[input type="hidden" name="bs_lottery_id"        value="<?php echo $lid; ?>"]]
+            [[input type="hidden" name="bs_source"            value="<?php echo htmlspecialchars($bc['source'], ENT_QUOTES); ?>"]]
+            [[input type="hidden" name="bs_name"              value="Best Settings - <?php echo $oppLotName; ?>"]]
+            [[button type="submit" class="skai-opp-card__cta skai-opp-card__cta--secondary"
+                     onclick="return confirm('Save as Best Settings for <?php echo $oppLotName; ?>?');"]]
+              Save as Best Settings
+            [[/button]]
+          [[/form]]
+        [[/div]]
+      <?php else: ?>
+        [[div class="skai-opp-card__metric"]]No runs yet[[/div]]
+      <?php endif; ?>
+    [[/div]]
+
+    <?php
+    // ── Rank Strength card ──
+    $br = $opp['best_rank'];
+    ?>
+    [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.6rem;"]]
+      [[span class="skai-opp-card__badge skai-opp-card__badge--rank"]]Best Rank Strength[[/span]]
+      [[div class="skai-opp-card__def"]]Rank strength means your winning hits appeared earlier in your list (closer to #1).[[/div]]
+      <?php if ($br['score'] > 0): ?>
+        [[div class="skai-opp-card__metric"]]<?php echo (int)$br['hits']; ?> hit<?php echo $br['hits'] === 1 ? '' : 's'; ?> at top ranks[[/div]]
+        [[div class="skai-opp-card__label"]]<?php echo htmlspecialchars($__methodLabels[$br['source']] ?? $br['source'], ENT_QUOTES); ?> &bull; <?php echo htmlspecialchars($br['draw_date'], ENT_QUOTES); ?>[[/div]]
+        [[div class="skai-opp-card__why"]]Why: This run matched actual draw numbers closer to the top of the list.[[/div]]
+        [[div class="skai-opp-card__actions"]]
+          [[button type="button" class="skai-opp-card__cta skai-opp-card__cta--primary"
+                   data-use-settings="1"
+                   data-lottery-id="<?php echo $lid; ?>"
+                   data-run-id="<?php echo (int)$br['run_id']; ?>"
+                   aria-label="Scroll to this lottery section"]]
+            Use these settings
+          [[/button]]
+          [[form method="post" style="display:inline;"]]
+            <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
+            [[input type="hidden" name="save_best_settings"   value="1"]]
+            [[input type="hidden" name="bs_run_id"            value="<?php echo (int)$br['run_id']; ?>"]]
+            [[input type="hidden" name="bs_lottery_id"        value="<?php echo $lid; ?>"]]
+            [[input type="hidden" name="bs_source"            value="<?php echo htmlspecialchars($br['source'], ENT_QUOTES); ?>"]]
+            [[input type="hidden" name="bs_name"              value="Best Settings - <?php echo $oppLotName; ?>"]]
+            [[button type="submit" class="skai-opp-card__cta skai-opp-card__cta--secondary"
+                     onclick="return confirm('Save as Best Settings for <?php echo $oppLotName; ?>?');"]]
+              Save as Best Settings
+            [[/button]]
+          [[/form]]
+        [[/div]]
+      <?php else: ?>
+        [[div class="skai-opp-card__metric"]]Not enough data yet[[/div]]
+        [[div class="skai-opp-card__label"]]Rank strength needs actual draw results.[[/div]]
+      <?php endif; ?>
+    [[/div]]
+
+    [[div class="skai-opp-banner <?php echo $bannerClass; ?>" style="margin-top:0.6rem;"]]
+      <?php echo htmlspecialchars($bannerMsg, ENT_QUOTES); ?>
+    [[/div]]
+  [[/div]]
+  <?php endforeach; ?>
+  [[/div]]
+[[/div]]
+<?php endif; ?>
+
+<!-- ==================================================
      Saved Predictions & Numbers Section $unionSql
 ================================================== -->
 
@@ -2421,6 +2937,36 @@ h3.title { font-size: 1.5rem; }
   [[/div]]
 [[/details]]
     [[/div]]
+
+    <?php
+    // Mini-summary: show best 3 for this lottery in the collapsed header
+    $__glid  = (int)$g['lottery_id'];
+    $__gopp  = isset($bestOpps[$__glid]) ? $bestOpps[$__glid] : null;
+    if ($__gopp):
+      $__gba = $__gopp['best_agreement'];
+      $__gbc = $__gopp['best_coverage'];
+      $__gbr = $__gopp['best_rank'];
+    ?>
+    [[div class="skai-lottery-summary"]]
+      <?php if ($__gba['score'] > 0): ?>
+      [[span class="skai-lottery-summary__chip"]]
+        Agreement: [[b]]<?php echo (int)$__gba['score']; ?> shared[[/b]]
+      [[/span]]
+      <?php endif; ?>
+      <?php if ($__gbc['score'] > 0): ?>
+      [[span class="skai-lottery-summary__chip"]]
+        Coverage: [[b]]<?php echo (int)$__gbc['score']; ?> unique[[/b]]
+      [[/span]]
+      <?php endif; ?>
+      <?php if ($__gbr['hits'] > 0): ?>
+      [[span class="skai-lottery-summary__chip"]]
+        Rank hits: [[b]]<?php echo (int)$__gbr['hits']; ?>[[/b]]
+      [[/span]]
+      <?php endif; ?>
+      [[a href="#best-opp-<?php echo $__glid; ?>" class="skai-lottery-summary__chip"
+         style="color:#1C66FF; text-decoration:none;"]]See Best Opportunities &uarr;[[/a]]
+    [[/div]]
+    <?php endif; ?>
     
     [[button type="button" class="lottery-collapse-toggle btn-secondary" 
              style="padding:0.35rem 0.75rem; font-size:0.8rem; white-space:nowrap;"
@@ -7632,6 +8178,62 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
     }
   });
 })();
+
+// =========================================================
+// "Use these settings" handler for Best Opportunities panel
+// Scrolls to the lottery group, expands it, and highlights
+// the relevant run card so the user sees it immediately.
+// =========================================================
+document.addEventListener('click', function(ev) {
+  var btn = ev.target ? ev.target.closest('[data-use-settings]') : null;
+  if (!btn) return;
+
+  var lotteryId = btn.getAttribute('data-lottery-id') || '';
+  var runId     = btn.getAttribute('data-run-id') || '';
+  if (!lotteryId) return;
+
+  // Find the lottery group by lottery_id prefix (data-lottery-id includes draw date)
+  var groups = document.querySelectorAll('.lottery-group[data-lottery-id]');
+  var target = null;
+  Array.prototype.forEach.call(groups, function(g) {
+    var gLid = (g.getAttribute('data-lottery-id') || '').split('-')[0];
+    if (gLid === String(lotteryId) && !target) target = g;
+  });
+  if (!target) return;
+
+  // Expand the group if collapsed
+  if (target.classList.contains('collapsed')) {
+    target.classList.remove('collapsed');
+    var tog = target.querySelector('.lottery-collapse-toggle');
+    if (tog) {
+      tog.textContent = 'Collapse';
+      tog.setAttribute('aria-expanded', 'true');
+      tog.setAttribute('aria-label', 'Collapse lottery section');
+      try { localStorage.setItem('lottery_collapsed_' + target.getAttribute('data-lottery-id'), 'false'); } catch(e) {}
+    }
+  }
+
+  // Scroll to the group
+  try {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch(e) {
+    target.scrollIntoView(true);
+  }
+
+  // Highlight the specific run card if we have a run_id
+  if (runId) {
+    var runCard = target.querySelector('[data-set-id="' + runId + '"]');
+    if (runCard) {
+      runCard.style.transition = 'box-shadow 0.3s ease, outline 0.3s ease';
+      runCard.style.outline = '3px solid #1C66FF';
+      runCard.style.boxShadow = '0 0 0 4px rgba(28,102,255,0.18)';
+      setTimeout(function() {
+        runCard.style.outline = '';
+        runCard.style.boxShadow = '';
+      }, 2800);
+    }
+  }
+});
 
 });
 [[/script]]
