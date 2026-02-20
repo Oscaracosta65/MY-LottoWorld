@@ -1689,9 +1689,11 @@ $modules = array(
 
 // ──────────────────────────────────────────────────────────────────
 // 6) Compute Best Opportunities per lottery (Agreement / Coverage / Rank Strength)
-//    Results stored in $bestOpps[lottery_id] for rendering below.
+//    $bestOpps[lottery_id]   = lottery-wide best (used only in Best Opps panel + lottery header)
+//    $bestByGroup[groupKey]  = draw-group-wide best (used for per-run ribbons inside that group)
 // ──────────────────────────────────────────────────────────────────
-$bestOpps = [];
+$bestOpps    = [];
+$bestByGroup = [];
 foreach ($groups as $groupKey => $g) {
     $lid = (int)$g['lottery_id'];
 
@@ -1825,6 +1827,79 @@ foreach ($groups as $groupKey => $g) {
             }
         }
     }
+
+    // [FIX-SCOPE-01] ─ Compute DRAW-WIDE best per group ──────────────────────
+    // $bestByGroup[$groupKey] stores the single best run id per category for
+    // THIS group only (one draw date). Ribbons inside a draw-date section MUST
+    // use this, not the lottery-wide $bestOpps, to avoid impossible claims.
+    $__bgAgreeBest   = ['score' => -1, 'run_id' => 0];
+    $__bgCoverBest   = ['score' => -1, 'run_id' => 0];
+    $__bgRankBest    = ['score' => -1, 'run_id' => 0, 'hit_count' => 0, 'pos_sum' => 0];
+
+    // Agreement (per-group): same per-run scoring as lottery-wide but scoped to $g
+    $__bgSrcPool = [];
+    foreach ($g['preds'] as $__s2) {
+        $__src2  = (string)$__s2->source;
+        $__nums2 = array_filter(array_map('intval', explode(',', (string)($__s2->main_numbers ?? ''))));
+        if (!isset($__bgSrcPool[$__src2])) $__bgSrcPool[$__src2] = [];
+        foreach ($__nums2 as $__n2) $__bgSrcPool[$__src2][$__n2] = true;
+    }
+    foreach ($g['preds'] as $__s2) {
+        $__src2    = (string)$__s2->source;
+        $__myNums2 = array_filter(array_map('intval', explode(',', (string)($__s2->main_numbers ?? ''))));
+        $__other2  = [];
+        foreach ($__bgSrcPool as $__os => $__nset) {
+            if ($__os !== $__src2) { foreach ($__nset as $__n2 => $_) $__other2[$__n2] = true; }
+        }
+        $__agScore2 = 0;
+        foreach ($__myNums2 as $__n2) { if (isset($__other2[$__n2])) $__agScore2++; }
+        if ($__agScore2 > $__bgAgreeBest['score']
+            || ($__agScore2 === $__bgAgreeBest['score'] && (int)$__s2->id > (int)$__bgAgreeBest['run_id'])) {
+            $__bgAgreeBest = ['score' => $__agScore2, 'run_id' => (int)$__s2->id];
+        }
+    }
+
+    // Coverage (per-group)
+    foreach ($g['preds'] as $__s2) {
+        $__cov2 = count(array_unique(array_filter(array_map('intval', explode(',', (string)($__s2->main_numbers ?? ''))))));
+        if ($__cov2 > $__bgCoverBest['score']
+            || ($__cov2 === $__bgCoverBest['score'] && (int)$__s2->id > (int)$__bgCoverBest['run_id'])) {
+            $__bgCoverBest = ['score' => $__cov2, 'run_id' => (int)$__s2->id];
+        }
+    }
+
+    // Rank Strength (per-group): use SAME drawMap/getDrawByDate logic as the render block
+    if ($drawRow) {
+        $__bgActual = [];
+        for ($__i2 = 0; $__i2 < 10; $__i2++) {
+            $__v2 = isset($drawRow['main_' . $__i2]) ? (int)$drawRow['main_' . $__i2] : null;
+            if ($__v2) $__bgActual[] = $__v2;
+        }
+        if (!empty($__bgActual)) {
+            foreach ($g['preds'] as $__s2) {
+                $__pl2   = array_values(array_filter(array_map('intval', explode(',', (string)($__s2->main_numbers ?? '')))));
+                $__hits2 = 0; $__pos2 = 0;
+                foreach ($__pl2 as $__p0 => $__n2) {
+                    if (in_array($__n2, $__bgActual, true)) { $__hits2++; $__pos2 += ($__p0 + 1); }
+                }
+                $__rScore2 = $__hits2 * 10000 - $__pos2;
+                if ($__rScore2 > $__bgRankBest['score']
+                    || ($__rScore2 === $__bgRankBest['score'] && (int)$__s2->id > (int)$__bgRankBest['run_id'])) {
+                    $__bgRankBest = ['score' => $__rScore2, 'run_id' => (int)$__s2->id,
+                                     'hit_count' => $__hits2, 'pos_sum' => $__pos2];
+                }
+            }
+        }
+    }
+
+    $bestByGroup[$groupKey] = [
+        'best_agreement_run_id' => $__bgAgreeBest['run_id'],
+        'best_coverage_run_id'  => $__bgCoverBest['run_id'],
+        'best_rank_run_id'      => $__bgRankBest['run_id'],
+        'draw_key'              => $drawKey,
+        'actual_nums'           => isset($__bgActual) ? $__bgActual : [],
+    ];
+    unset($__bgSrcPool, $__bgAgreeBest, $__bgCoverBest, $__bgRankBest, $__bgActual);
 }
 
 // Method display labels (short) for Best Opportunities display
@@ -2832,15 +2907,34 @@ h3.title { font-size: 1.5rem; }
     <?php
     // ── Rank Strength card ──
     $br = $opp['best_rank'];
+    // [FIX-SCOPE-04] Format draw_date for the "Best overall (from …)" label
+    $__brDateLabel = '';
+    if (!empty($br['draw_date'])) {
+        try { $__brDateLabel = (new DateTime($br['draw_date']))->format('M j, Y'); }
+        catch (Exception $__e) { $__brDateLabel = htmlspecialchars($br['draw_date'], ENT_QUOTES); }
+    }
     ?>
     [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.6rem;"]]
       [[span class="skai-opp-card__badge skai-opp-card__badge--rank"]]Best Rank Strength[[/span]]
       [[div class="skai-opp-card__def"]]How early the hits showed up in your list (closer to #1 = stronger).[[/div]]
-      [[div class="skai-opp-card__run-label"]]Best single run (picked from <?php echo $totalRuns; ?> saved run<?php echo $totalRuns === 1 ? '' : 's'; ?>)[[/div]]
+      [[div class="skai-opp-card__run-label"]]Best overall (from <?php echo htmlspecialchars($__brDateLabel ?: $br['draw_date'], ENT_QUOTES); ?>) &bull; picked from <?php echo $totalRuns; ?> saved run<?php echo $totalRuns === 1 ? '' : 's'; ?>[[/div]]
       <?php if ($br['score'] > 0): ?>
         [[div class="skai-opp-card__metric"]]<?php echo (int)$br['hits']; ?> hit<?php echo $br['hits'] === 1 ? '' : 's'; ?> at top ranks[[/div]]
-        [[div class="skai-opp-card__label"]]<?php echo htmlspecialchars($__methodLabels[$br['source']] ?? $br['source'], ENT_QUOTES); ?> &bull; <?php echo htmlspecialchars($br['draw_date'], ENT_QUOTES); ?>[[/div]]
+        [[div class="skai-opp-card__label"]]<?php echo htmlspecialchars($__methodLabels[$br['source']] ?? $br['source'], ENT_QUOTES); ?>[[/div]]
         [[div class="skai-opp-card__why"]]Why: This one run matched actual draw numbers closer to the top of the list.[[/div]]
+        <?php
+        // [FIX-SCOPE-05] skai_debug block (admin-only, off by default)
+        $__skaiDebug = ($user->authorise('core.admin') && \Joomla\CMS\Factory::getApplication()->input->get('skai_debug', 0, 'INT') === 1);
+        if ($__skaiDebug): ?>
+          [[div style="font-size:0.72rem; background:#fffbe6; border:1px solid #fbbf24; border-radius:6px; padding:0.4rem 0.6rem; margin:0.4rem 0; color:#78350f;"]]
+            <strong>[skai_debug] Best Rank (lottery-wide)</strong><br>
+            lottery_id: <?php echo $lid; ?> &bull;
+            draw_date: <?php echo htmlspecialchars($br['draw_date'], ENT_QUOTES); ?> &bull;
+            run_id: <?php echo (int)$br['run_id']; ?> &bull;
+            hits: <?php echo (int)$br['hits']; ?> &bull;
+            score: <?php echo (int)$br['score']; ?>
+          [[/div]]
+        <?php endif; ?>
         [[div class="skai-opp-card__actions"]]
           [[button type="button" class="skai-opp-card__cta skai-opp-card__cta--primary"
                    data-use-settings="1"
@@ -2977,7 +3071,7 @@ h3.title { font-size: 1.5rem; }
 
 [[/div]]
 
-<?php foreach ($groups as $g):
+<?php foreach ($groups as $__groupKey => $g):
   $lottoUrl = $lottoUrlsById[$g['lottery_id']] ?? null;
   $meta     = $lottoMetaById[$g['lottery_id']] ?? [];
   $state    = $meta['state'] ?? '';
@@ -5175,9 +5269,10 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
             ?>
 
             <?php
-              // Best Rank Strength highlight: check if this run is the winner for this lottery
-              $__cardLid       = (int)$g['lottery_id'];
-              $__bestRankRunId = isset($bestOpps[$__cardLid]) ? (int)$bestOpps[$__cardLid]['best_rank']['run_id'] : 0;
+              // [FIX-SCOPE-03] Best Rank Strength ribbon: use DRAW-GROUP scope, not lottery-wide.
+              // $bestByGroup[$__groupKey] is computed per draw-date group so the ribbon
+              // only appears on runs that belong to THIS draw section.
+              $__bestRankRunId = isset($bestByGroup[$__groupKey]) ? (int)$bestByGroup[$__groupKey]['best_rank_run_id'] : 0;
               $__isBestRank    = ($__bestRankRunId > 0 && (int)$s->id === $__bestRankRunId);
             ?>
             [[div class="prediction-card <?php echo str_replace('_','-',$s->source); ?><?php if ($__isBestRank): ?> skai-best-rank-highlight<?php endif; ?>"
@@ -5200,6 +5295,16 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
       [[/span]]
       <?php if ($__isBestRank): ?>
         [[span class="skai-best-rank-ribbon" title="This run had the most hits appearing earliest in the list"]]&#9733; Best Rank Strength[[/span]]
+        <?php
+        // [FIX-SCOPE-05] Per-group debug block (admin-only, off by default)
+        if (isset($__skaiDebug) && $__skaiDebug): ?>
+          [[div style="font-size:0.7rem; background:#fffbe6; border:1px solid #fbbf24; border-radius:4px; padding:0.25rem 0.5rem; margin:0.2rem 0; color:#78350f; display:inline-block;"]]
+            [skai_debug] group: <?php echo htmlspecialchars($__groupKey, ENT_QUOTES); ?> &bull;
+            draw_key: <?php echo htmlspecialchars($bestByGroup[$__groupKey]['draw_key'] ?? '', ENT_QUOTES); ?> &bull;
+            actual: [<?php echo htmlspecialchars(implode(',', $bestByGroup[$__groupKey]['actual_nums'] ?? []), ENT_QUOTES); ?>] &bull;
+            run_id: <?php echo (int)$s->id; ?>
+          [[/div]]
+        <?php endif; ?>
       <?php endif; ?>
 
       <?php
