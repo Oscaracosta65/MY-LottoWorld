@@ -389,15 +389,15 @@ echo '{loadmoduleid 126}';
 [[div id="skai-global-snapshot" class="skai-global-snapshot" aria-label="Global strategic snapshot" role="region"]]
   [[div class="skai-snapshot-grid"]]
     [[div class="skai-snapshot-metric" id="snap-signal"]]
-      [[div class="skai-snapshot-label"]]Signal Strength[[/div]]
+      [[div class="skai-snapshot-label" title="How many methods agree on the same numbers -- Weak, Emerging, Structured, or Strong"]]Signal Strength[[/div]]
       [[div class="skai-snapshot-value" id="snap-signal-val"]]--[[/div]]
     [[/div]]
     [[div class="skai-snapshot-metric" id="snap-evidence"]]
-      [[div class="skai-snapshot-label"]]Evidence Depth[[/div]]
+      [[div class="skai-snapshot-label" title="How many saved runs you have -- more runs give better recommendations"]]Evidence Depth[[/div]]
       [[div class="skai-snapshot-value" id="snap-evidence-val"]]--[[/div]]
     [[/div]]
     [[div class="skai-snapshot-metric" id="snap-trend"]]
-      [[div class="skai-snapshot-label"]]Trend Direction[[/div]]
+      [[div class="skai-snapshot-label" title="Whether agreement between methods is going up, staying flat, or going down compared to your last visit"]]Trend Direction[[/div]]
       [[div class="skai-snapshot-value" id="snap-trend-val"]]--[[/div]]
     [[/div]]
     [[div class="skai-snapshot-metric" id="snap-best-lottery"]]
@@ -1721,10 +1721,15 @@ foreach ($groups as $groupKey => $g) {
     }
 
     // ── Coverage: individual run with most unique main numbers ──
+    // Tie-break: more unique numbers wins; then most recent draw_date; then highest run id (most recently saved)
     foreach ($g['preds'] as $s) {
         $nums = array_unique(array_filter(array_map('intval', explode(',', (string)($s->main_numbers ?? '')))));
         $coverage = count($nums);
-        if ($coverage > $bestOpps[$lid]['best_coverage']['score']) {
+        $prev     = $bestOpps[$lid]['best_coverage'];
+        $isBetter = ($coverage > $prev['score'])
+            || ($coverage === $prev['score'] && (string)$g['draw_date'] > (string)$prev['draw_date'])
+            || ($coverage === $prev['score'] && (string)$g['draw_date'] === (string)$prev['draw_date'] && (int)$s->id > (int)$prev['run_id']);
+        if ($isBetter) {
             $bestOpps[$lid]['best_coverage'] = [
                 'score'     => $coverage,
                 'draw_date' => (string)$g['draw_date'],
@@ -2570,7 +2575,7 @@ h3.title { font-size: 1.5rem; }
 <?php if (!empty($bestOpps)): ?>
 [[div class="skai-best-opps"]]
   [[h2 class="skai-best-opps__heading"]]Best Opportunities[[/h2]]
-  [[p class="skai-best-opps__sub"]]Your top picks from every lottery you have analyzed — Agreement, Coverage, and Rank Strength explained in plain English.[[/p]]
+  [[p class="skai-best-opps__sub"]]Your top picks from every lottery you have analyzed -- Agreement, Coverage, and Rank Strength explained in plain English.[[/p]]
   [[div class="skai-best-opps__grid"]]
   <?php foreach ($bestOpps as $lid => $opp):
     $oppLotName   = htmlspecialchars($opp['lottery_name'] ?? '', ENT_QUOTES);
