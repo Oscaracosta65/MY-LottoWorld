@@ -1699,6 +1699,7 @@ foreach ($groups as $groupKey => $g) {
         $bestOpps[$lid] = [
             'lottery_name'    => (string)($g['lottery_name'] ?? ''),
             'lottery_id'      => $lid,
+            'state_name'      => (string)($lottoMetaById[$lid]['state'] ?? ''),
             'total_runs'      => 0,
             'best_agreement'  => ['score' => -1, 'draw_date' => '', 'numbers' => [], 'methods' => [], 'run_id' => 0, 'source' => ''],
             'best_coverage'   => ['score' => -1, 'draw_date' => '', 'numbers' => [], 'source' => '', 'run_id' => 0],
@@ -1793,17 +1794,25 @@ foreach ($groups as $groupKey => $g) {
         if (!empty($actualNums)) {
             foreach ($g['preds'] as $s) {
                 $predList = array_values(array_filter(array_map('intval', explode(',', (string)($s->main_numbers ?? '')))));
-                $nPred    = count($predList);
-                $rankScore = 0;
+                // Rank Strength fix: primary = hit count; tie-break = sum of 1-indexed
+                // positions of hits (lower = hits appeared earlier in the list).
+                // Score = hits * 10000 - positionSum. This is size-independent:
+                // a list of 5 or 20 numbers is treated the same way.
                 $hitCount  = 0;
+                $posSum    = 0;
                 foreach ($predList as $pos0 => $n) {
                     if (in_array($n, $actualNums, true)) {
-                        // Earlier rank = higher score (rank 1 = $nPred points, last = 1 point)
-                        $rankScore += max(1, $nPred - $pos0);
                         $hitCount++;
+                        $posSum += ($pos0 + 1); // 1-indexed position
                     }
                 }
-                if ($rankScore > $bestOpps[$lid]['best_rank']['score']) {
+                // Use posSum negated so more-negative (earlier hits) loses in > compare.
+                $rankScore = $hitCount * 10000 - $posSum;
+                $prev = $bestOpps[$lid]['best_rank'];
+                // Tie-break when scores equal: prefer most recently saved run (higher id).
+                $isBetter = ($rankScore > $prev['score'])
+                    || ($rankScore === $prev['score'] && (int)$s->id > (int)$prev['run_id']);
+                if ($isBetter) {
                     $bestOpps[$lid]['best_rank'] = [
                         'score'     => $rankScore,
                         'draw_date' => (string)$g['draw_date'],
@@ -2030,6 +2039,53 @@ h3.title { font-size: 1.5rem; }
   height:120px; min-width:38px;
   font-weight:800; font-size:14px; color:#2c3e50;
   background:linear-gradient(180deg,#fdfdfd,#f2f4f7);
+}
+/* Small logo for Best Opportunities panel */
+.lotto-logo--sm {
+  height:32px;
+  width:auto;
+  border-radius:4px;
+  background:#fff;
+  border:1px solid #e5e8ec;
+  padding:2px;
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
+  object-fit:contain;
+  vertical-align:middle;
+}
+.lotto-logo--sm.fallback {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:32px;
+  min-width:32px;
+  font-weight:800;
+  font-size:11px;
+  color:#2c3e50;
+  background:linear-gradient(180deg,#fdfdfd,#f2f4f7);
+  border-radius:4px;
+  border:1px solid #e5e8ec;
+  padding:2px 5px;
+}
+/* Best Rank Strength card highlight */
+.prediction-card.skai-best-rank-highlight {
+  outline: 3px solid #1C66FF;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(28,102,255,0.18), 0 2px 12px rgba(28,102,255,0.12);
+  position: relative;
+  z-index: 1;
+}
+.skai-best-rank-ribbon {
+  display: inline-block;
+  background: #1C66FF;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+  margin-left: 6px;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 .lotto-title-wrap {
   display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;
@@ -2617,21 +2673,48 @@ h3.title { font-size: 1.5rem; }
   [[div class="skai-best-opps__grid"]]
   <?php foreach ($bestOpps as $lid => $opp):
     $oppLotName   = htmlspecialchars($opp['lottery_name'] ?? '', ENT_QUOTES);
+    $oppStateName = (string)($opp['state_name'] ?? '');
     $totalRuns    = (int)$opp['total_runs'];
     $bannerClass  = $totalRuns < 2 ? 'skai-opp-banner--warn' : '';
     $bannerMsg    = $totalRuns < 2
       ? 'Save 1-2 more runs to improve these recommendations.'
       : 'More saved runs = better recommendations.';
+    // Build logo for the Best Opportunities card header
+    $oppLogo = ['path' => '', 'exists' => false, 'alt' => ''];
+    if ($oppStateName !== '' && $opp['lottery_name'] !== '') {
+        $oppLogo = buildLotteryLogoPath($oppStateName, (string)$opp['lottery_name']);
+    }
   ?>
   [[div class="skai-opp-card" id="best-opp-<?php echo $lid; ?>"]]
-    [[div style="font-size:0.95rem; font-weight:700; color:#0A1A33; margin-bottom:0.5rem;"]]
-      <?php echo $oppLotName; ?>
+    [[div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;"]]
+      <?php if (!empty($oppLogo['path'])): ?>
+        <?php if ($oppLogo['exists']): ?>
+          [[img class="lotto-logo--sm"
+               src="<?php echo htmlspecialchars($oppLogo['path'], ENT_QUOTES); ?>"
+               alt="<?php echo htmlspecialchars($oppLogo['alt'], ENT_QUOTES); ?>"
+               loading="lazy" width="64" height="32"]]
+        <?php else: ?>
+          [[span class="lotto-logo--sm fallback"
+                 aria-label="<?php echo htmlspecialchars($oppLogo['alt'], ENT_QUOTES); ?>"]]
+            <?php
+              $__parts = preg_split('/\s+/', (string)$opp['lottery_name']);
+              $__ini = '';
+              foreach ($__parts as $__p) {
+                  if ($__p !== '') { $__ini .= mb_strtoupper(mb_substr($__p, 0, 1)); if (mb_strlen($__ini) >= 2) break; }
+              }
+              echo htmlspecialchars($__ini ?: 'LE', ENT_QUOTES);
+            ?>
+          [[/span]]
+        <?php endif; ?>
+      <?php endif; ?>
+      [[span style="font-size:0.95rem; font-weight:700; color:#0A1A33;"]]<?php echo $oppLotName; ?>[[/span]]
     [[/div]]
 
     <?php
-    // ── Agreement card ──
+    // ── Agreement card (hidden - not deleted) ──
     $ba = $opp['best_agreement'];
     ?>
+    [[div style="display:none;"]]
     [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.1rem;"]]
       [[span class="skai-opp-card__badge skai-opp-card__badge--agree"]]Best Agreement[[/span]]
       [[div class="skai-opp-card__def"]]More methods picked the same number.[[/div]]
@@ -2691,11 +2774,13 @@ h3.title { font-size: 1.5rem; }
         [[div class="skai-opp-card__label"]]Select multiple methods to see agreement.[[/div]]
       <?php endif; ?>
     [[/div]]
+    [[/div]]<!-- end hidden Agreement -->
 
     <?php
-    // ── Coverage card ──
+    // ── Coverage card (hidden - not deleted) ──
     $bc = $opp['best_coverage'];
     ?>
+    [[div style="display:none;"]]
     [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.6rem;"]]
       [[span class="skai-opp-card__badge skai-opp-card__badge--cover"]]Best Coverage[[/span]]
       [[div class="skai-opp-card__def"]]How many unique numbers this one run gives you.[[/div]]
@@ -2742,6 +2827,7 @@ h3.title { font-size: 1.5rem; }
         [[div class="skai-opp-card__metric"]]No runs yet[[/div]]
       <?php endif; ?>
     [[/div]]
+    [[/div]]<!-- end hidden Coverage -->
 
     <?php
     // ── Rank Strength card ──
@@ -5088,7 +5174,13 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
 
             ?>
 
-            [[div class="prediction-card <?php echo str_replace('_','-',$s->source); ?>"
+            <?php
+              // Best Rank Strength highlight: check if this run is the winner for this lottery
+              $__cardLid       = (int)$g['lottery_id'];
+              $__bestRankRunId = isset($bestOpps[$__cardLid]) ? (int)$bestOpps[$__cardLid]['best_rank']['run_id'] : 0;
+              $__isBestRank    = ($__bestRankRunId > 0 && (int)$s->id === $__bestRankRunId);
+            ?>
+            [[div class="prediction-card <?php echo str_replace('_','-',$s->source); ?><?php if ($__isBestRank): ?> skai-best-rank-highlight<?php endif; ?>"
      data-set-id="<?php echo (int)$s->id; ?>"
      data-source="<?php echo htmlspecialchars($s->source, ENT_QUOTES); ?>"
      data-pure="<?php echo ($s->source==='skip_hit' && (int)($s->pure_mode ?? 0)===1) ? '1' : '0'; ?>"]]
@@ -5106,6 +5198,9 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
           echo htmlspecialchars($moduleLabel, ENT_QUOTES);
         ?>
       [[/span]]
+      <?php if ($__isBestRank): ?>
+        [[span class="skai-best-rank-ribbon" title="This run had the most hits appearing earliest in the list"]]&#9733; Best Rank Strength[[/span]]
+      <?php endif; ?>
 
       <?php
         // Default: use the stored label
