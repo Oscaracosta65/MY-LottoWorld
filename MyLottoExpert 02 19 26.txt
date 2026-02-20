@@ -313,6 +313,138 @@ echo '{loadmoduleid 126}';
   [[/div]]
 [[/div]]
 
+<!-- [SKAI-REF-01] Global Strategic Snapshot Panel -->
+[[div id="skai-global-snapshot" class="skai-global-snapshot" aria-label="Global strategic snapshot" role="region"]]
+  [[div class="skai-snapshot-grid"]]
+    [[div class="skai-snapshot-metric" id="snap-signal"]]
+      [[div class="skai-snapshot-label"]]Signal Strength[[/div]]
+      [[div class="skai-snapshot-value" id="snap-signal-val"]]--[[/div]]
+    [[/div]]
+    [[div class="skai-snapshot-metric" id="snap-evidence"]]
+      [[div class="skai-snapshot-label"]]Evidence Depth[[/div]]
+      [[div class="skai-snapshot-value" id="snap-evidence-val"]]--[[/div]]
+    [[/div]]
+    [[div class="skai-snapshot-metric" id="snap-trend"]]
+      [[div class="skai-snapshot-label"]]Trend Direction[[/div]]
+      [[div class="skai-snapshot-value" id="snap-trend-val"]]--[[/div]]
+    [[/div]]
+    [[div class="skai-snapshot-metric" id="snap-best-lottery"]]
+      [[div class="skai-snapshot-label"]]Strongest Lottery[[/div]]
+      [[div class="skai-snapshot-value skai-snapshot-value--sm" id="snap-best-lottery-val"]]--[[/div]]
+    [[/div]]
+    [[div class="skai-snapshot-metric" id="snap-best-method"]]
+      [[div class="skai-snapshot-label"]]Leading Method[[/div]]
+      [[div class="skai-snapshot-value skai-snapshot-value--sm" id="snap-best-method-val"]]--[[/div]]
+    [[/div]]
+    [[div class="skai-snapshot-metric" id="snap-lotteries"]]
+      [[div class="skai-snapshot-label"]]Active Lotteries[[/div]]
+      [[div class="skai-snapshot-value" id="snap-lotteries-val"]]--[[/div]]
+    [[/div]]
+  [[/div]]
+  [[button type="button" id="skai-focus-btn" class="skai-focus-btn" aria-pressed="false" aria-label="Focus on best opportunity"]]
+    Focus on Best Opportunity
+  [[/button]]
+[[/div]]
+
+[[style]]
+/* [SKAI-REF-01] Global Strategic Snapshot */
+.skai-global-snapshot {
+  background: linear-gradient(135deg, #0A1A33 0%, #162d52 100%);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin: 0 0 14px 0;
+  box-shadow: 0 4px 14px rgba(10,26,51,0.18);
+}
+.skai-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 16px;
+}
+@media (max-width: 640px) {
+  .skai-snapshot-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.skai-snapshot-metric {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.skai-snapshot-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.60);
+  margin-bottom: 4px;
+}
+.skai-snapshot-value {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.2;
+}
+.skai-snapshot-value--sm { font-size: 0.88rem; }
+
+/* [SKAI-REF-05] Focus Mode */
+.skai-focus-btn {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 999px;
+  padding: 0.22rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  margin-top: 8px;
+  display: inline-block;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.skai-focus-btn:hover,
+.skai-focus-btn[aria-pressed="true"] {
+  background: #1C66FF;
+  border-color: #1C66FF;
+  color: #ffffff;
+}
+.skai-focus-on .lottery-group:not(.skai-focus-winner) {
+  opacity: 0.4;
+  filter: grayscale(0.3);
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+.skai-focus-on .lottery-group.skai-focus-winner {
+  box-shadow: 0 0 0 3px #1C66FF, 0 8px 24px rgba(28,102,255,0.22);
+  transition: box-shadow 0.25s ease;
+}
+
+/* [SKAI-REF-06] Advanced Tools Details */
+.skai-adv-tools-details {
+  display: inline-block;
+}
+.skai-adv-tools-summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6b7280;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(10,26,51,0.12);
+  border-radius: 6px;
+  list-style: none;
+  user-select: none;
+}
+.skai-adv-tools-summary::-webkit-details-marker { display: none; }
+.skai-adv-tools-body {
+  position: absolute;
+  z-index: 100;
+  background: #ffffff;
+  border: 1px solid rgba(10,26,51,0.14);
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(10,26,51,0.12);
+  min-width: 160px;
+  margin-top: 4px;
+}
+
+[[/style]]
+
 [[style]]
 /* Compact variant - mapped to SKAI card */
 .info-card.compact { padding: 0.75rem; }
@@ -2161,20 +2293,22 @@ h3.title { font-size: 1.5rem; }
   [[/div]]
 
   [[div class="toolbar-group toolbar-group-archive"]]
-    [[div class="toolbar-caption"]]
-      Archive
-    [[/div]]
-
-    [[form
-      method="post"
-      class="delete-form"
-      onsubmit="return confirm('Delete all saved predictions? This cannot be undone.');"]]
-      <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
-      [[input type="hidden" name="delete_all_predictions" value="1"]]
-      [[button type="submit" class="btn btn-danger"]]
-        Clear All
-      [[/button]]
-    [[/form]]
+    [[details class="skai-adv-tools-details"]]
+      [[summary class="skai-adv-tools-summary" aria-label="Advanced archive controls"]]Advanced Tools[[/summary]]
+      [[div class="skai-adv-tools-body"]]
+        [[div class="toolbar-caption"]]Archive[[/div]]
+        [[form
+          method="post"
+          class="delete-form"
+          onsubmit="return confirm('Delete all saved predictions? This cannot be undone.');"]]
+          <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
+          [[input type="hidden" name="delete_all_predictions" value="1"]]
+          [[button type="submit" class="btn btn-danger"]]
+            Clear All
+          [[/button]]
+        [[/form]]
+      [[/div]]
+    [[/details]]
   [[/div]]
 
 [[/div]]
@@ -2186,7 +2320,7 @@ h3.title { font-size: 1.5rem; }
   $country  = $meta['country'] ?? '';
 ?>
 
-[[div class="lottery-group card skai-card" data-lottery-id="<?php echo (int)$g['lottery_id']; ?>-<?php echo htmlspecialchars($g['draw_date'], ENT_QUOTES); ?>"]]
+[[div class="lottery-group card skai-card collapsed" data-lottery-id="<?php echo (int)$g['lottery_id']; ?>-<?php echo htmlspecialchars($g['draw_date'], ENT_QUOTES); ?>"]]
   [[div class="lottery-header skai-card__header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;"]]
     [[div style="display:flex; align-items:center; flex:1; flex-wrap:wrap; gap:0.5rem;"]]
 
@@ -2268,24 +2402,28 @@ h3.title { font-size: 1.5rem; }
 <?php endif; ?>
 
 
-[[form method="post"
-       style="margin-left:.5rem; display:inline-block;"
-       onsubmit="return confirm('Delete all predictions for this draw?');"]]
-  <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
-  [[input type="hidden" name="delete_lottery_predictions" value="1"]]
-  [[input type="hidden" name="lottery_id" value="<?php echo (int)$g['lottery_id']; ?>"]]
-  [[input type="hidden" name="draw_date"  value="<?php echo htmlspecialchars($g['draw_date'], ENT_QUOTES); ?>"]]
-  [[button type="submit" class="btn-danger" style="padding:0.25rem 0.6rem; font-size:0.75rem;"]]
-    Delete This Draw
-  [[/button]]
-[[/form]]
+[[details class="skai-adv-tools-details" style="display:inline-block; margin-left:.5rem;"]]
+  [[summary class="skai-adv-tools-summary" aria-label="Advanced tools for this draw"]]Advanced[[/summary]]
+  [[div class="skai-adv-tools-body"]]
+  [[form method="post"
+         onsubmit="return confirm('Delete all predictions for this draw?');"]]
+    <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
+    [[input type="hidden" name="delete_lottery_predictions" value="1"]]
+    [[input type="hidden" name="lottery_id" value="<?php echo (int)$g['lottery_id']; ?>"]]
+    [[input type="hidden" name="draw_date"  value="<?php echo htmlspecialchars($g['draw_date'], ENT_QUOTES); ?>"]]
+    [[button type="submit" class="btn-danger" style="padding:0.25rem 0.6rem; font-size:0.75rem;"]]
+      Delete This Draw
+    [[/button]]
+  [[/form]]
+  [[/div]]
+[[/details]]
     [[/div]]
     
     [[button type="button" class="lottery-collapse-toggle btn-secondary" 
              style="padding:0.35rem 0.75rem; font-size:0.8rem; white-space:nowrap;"
-             aria-expanded="true"
-             aria-label="Collapse lottery section"]]
-      Collapse
+             aria-expanded="false"
+             aria-label="Expand lottery section"]]
+      Expand
     [[/button]]
   [[/div]]
   
@@ -3870,7 +4008,7 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
 <!-- ============ PLACEMENT HEATMAP (Mains) ============ -->
 [[div class="card placement-wrap"]]
   [[div class="card-header"]]
-    [[h3 class="title"]]Placement Performance Heatmap (Mains)[[/h3]]
+    [[h3 class="title"]]Rank Accuracy Profile (Mains)[[/h3]]
   [[/div]]
 
   [[div class="helper" style="margin:.5rem 0 1rem; font-size:.95rem; color:#2c3e50; line-height:1.5;"]]
@@ -4088,7 +4226,7 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
 
 [[div class="helper" style="margin-top:.75rem; padding:.85rem 1.05rem; background:#f7fbff; border:1px solid #dfe6f2; border-radius:8px;"]]
   [[div style="font-weight:700; margin-bottom:0.25rem; font-size:0.95rem; color:#1f2a3a; letter-spacing:0.01em;"]]
-    Smart Takeaway for this draw
+    Rank Accuracy Insight
   [[/div]]
 
   [[div style="font-size:0.9rem; margin-bottom:0.35rem;"]]
@@ -5108,22 +5246,22 @@ document.addEventListener('DOMContentLoaded', function() {
     bestEl.innerHTML = bestHtml;
     col.insertBefore(bestEl.firstChild, col.firstChild);
 
-    // Collapse history if > threshold
-    if (cards.length > HISTORY_CAP) {
+    // Always wrap all original cards in a history accordion (show only best card by default)
+    if (cards.length > 0) {
       var detailsEl = document.createElement('details');
       detailsEl.className = 'skai-history-details';
 
       var summaryEl = document.createElement('summary');
       summaryEl.className = 'skai-history-summary';
       summaryEl.innerHTML =
-        'Analysis History' +
-        '<span class="skai-history-count">' + cards.length + ' runs</span>';
+        'View History' +
+        '<span class="skai-history-count">' + cards.length + (cards.length === 1 ? ' run' : ' runs') + '</span>';
       detailsEl.appendChild(summaryEl);
 
       var bodyEl = document.createElement('div');
       bodyEl.className = 'skai-history-body';
 
-      // Move all cards into the history body
+      // Move all original cards into the history accordion
       Array.prototype.forEach.call(cards, function(card) {
         bodyEl.appendChild(card);
       });
@@ -6881,28 +7019,49 @@ function provenanceFor(n){
   };
 }
 
-// ---------- Compose structured HTML ----------
+// ---------- Compose structured HTML (3-block: Signal / Meaning / Next Move) ----------
+// Pre-compute posture + next steps (needed by BLOCK 2 & 3 below)
+var posture = skaiPosture(levelLabel, methodsUsed, overlapScore, evidenceScore);
+var nextSteps = skaiNextSteps(levelLabel, checked.length, methodsUsed, overlapScore, evidenceScore);
+
 var html = '';
 
-// Headline area: Post shows recap; Pre shows recommended head list
-if (mode === 'post') {
-  var drawnMainText  = drawnMain.length  ? ('Drawn mains: ' + drawnMain.join(', ')) : 'Drawn mains: n/a';
-  var drawnExtraText = drawnExtra.length ? (' • ' + (window.extraLabel || 'Extras') + ': ' + drawnExtra.join(', ')) : '';
-  html += '[[div class="s-row subtle"]][[strong]]Result Recap:[[/strong]] ' + drawnMainText + drawnExtraText + '.[[/div]]';
-} else {
-  var headMain  = finalMain.length ? ('Mains: ' + take(finalMain, 8).join(', ')) : 'Mains: -';
-  var headExtra = recExtra.length   ? (' • ' + (window.extraLabel || 'Extras') + ': ' + recExtra.join(', ')) : '';
-  html += '[[div class="s-row subtle"]][[strong]]Top Candidates:[[/strong]] ' + headMain + headExtra + '.[[/div]]';
-}
+// ===== BLOCK 1: SIGNAL =====
+html += '[[div class="section-h"]][[strong]]Signal[[/strong]][[/div]]';
 
-// ===== Summary (bold) =====
+// Overlap count line
 var overlapParts = [];
 if (checked.length >= 2) {
-  if (commonsMain.length) { overlapParts.push(commonsMain.length + ' ' + (commonsMain.length===1?'main overlap':'main overlaps')); }
-  if (commonsExtra.length){ overlapParts.push(commonsExtra.length + ' ' + (commonsExtra.length===1?'extra overlap':'extra overlaps')); }
+  if (commonsMain.length)  overlapParts.push(commonsMain.length  + ' main');
+  if (commonsExtra.length) overlapParts.push(commonsExtra.length + ' extra');
+}
+var totalOverlapCount = commonsMain.length + commonsExtra.length;
+var overlapLine = overlapParts.length
+  ? ('Agreement: ' + overlapParts.join(' + ') + (totalOverlapCount === 1 ? ' overlap' : ' overlaps') + ' across selected methods.')
+  : (checked.length <= 1 ? 'Select more methods to see agreement signals.' : 'No overlap yet across selected methods.');
+
+// Evidence (sweet-spots found)
+var evidenceNote = bits.length
+  ? ('Evidence: ' + bits.join('; ') + '.')
+  : 'Evidence: not enough history to locate sweet spots yet.';
+
+// Confidence
+var confidenceNote = 'Confidence: ' + levelLabel + '.';
+if (mode === 'post') {
+  var drawnMainText  = drawnMain.length  ? drawnMain.join(', ') : 'n/a';
+  var drawnExtraText = drawnExtra.length ? ' | ' + (window.extraLabel || 'Extras') + ': ' + drawnExtra.join(', ') : '';
+  html += '[[div class="bullet"]]Drawn: [[strong]]' + drawnMainText + drawnExtraText + '[[/strong]][[/div]]';
+} else {
+  var headMain  = finalMain.length ? take(finalMain, 8).join(', ') : '-';
+  var headExtra = recExtra.length  ? ' | ' + (window.extraLabel || 'Extras') + ': ' + recExtra.join(', ') : '';
+  html += '[[div class="bullet"]]Top candidates: [[strong]]' + headMain + headExtra + '[[/strong]][[/div]]';
 }
 
-// Build method evidence lines for the CURRENT selection
+html += '[[div class="bullet"]]' + overlapLine + '[[/div]]';
+html += '[[div class="bullet"]]' + evidenceNote + '[[/div]]';
+html += '[[div class="bullet"]]' + confidenceNote + '[[/div]]';
+
+// Method evidence summary (compact)
 var evidenceLines = [];
 methods.forEach(function(m){
   var rowM = selStats[m].main, rowE = selStats[m].extra;
@@ -6910,97 +7069,50 @@ methods.forEach(function(m){
   var totalE = sumObjectVals(rowE);
   var runs   = selStats[m].runs|0;
   if (!runs) return;
-
-  // Peaks with minimum totals (mains>=3, extras>=2)
   var pkM = topRanksWithTies(rowM, 3, 3);
   var pkE = topRanksWithTies(rowE, 2, 2);
-
-  var line = labelShort[m] + ' - ';
-  line += 'Main hits: ' + totalM;
-  if (drawnExtra.length) line += ' • Extra hits: ' + totalE;
-
-  if (pkM.ranks.length) line += ' ; peaks (mains): ' + fmtRankList(pkM.ranks);
-  if (drawnExtra.length && pkE.ranks.length) line += ' ; peaks (extras): ' + fmtRankList(pkE.ranks);
-  line += '.';
+  var line = labelShort[m] + ': ' + totalM + ' main hits';
+  if (drawnExtra.length) line += ', ' + totalE + ' extra hits';
+  if (pkM.ranks.length) line += '; peaks ranks ' + fmtRankList(pkM.ranks);
   evidenceLines.push(line);
 });
-
-// Placement line for summary
-var placementLine = bits.length
-  ? ('Placement profile: ' + bits.join('; ') + '.')
-  : 'Placement profile: not enough selected history to locate sweet spots.';
-
-var overlapShort = overlapParts.length ? (' Overlap across selected: ' + overlapParts.join(' + ') + '.') : '';
-
-var summaryLine;
-if (mode === 'post') {
-  var core = placementLine.replace(/^Placement profile:\s*/i, '') + overlapShort;
-  summaryLine = 'Looking back at this draw, ' + core.replace(/^\s+/, '');
-} else {
-  var peakSummary = bits.length
-    ? bits.join('; ') + '.'
-    : 'there is not enough selected history yet to locate clear sweet spots.';
-  var overlapIntro = overlapParts.length
-    ? ('Overlaps are strong - ' + overlapParts.join(' + ') + '. ')
-    : '';
-
-  // Brand-honest single-selection state
-  if (checked.length === 1) {
-    overlapIntro = 'Selected method numbers (single-run view). ';
-  }
-
-  summaryLine = 'Right now, ' + overlapIntro + peakSummary;
-}
-
-html += '[[div class="section-h"]][[strong]]Quick Summary:[[/strong]][[/div]]' +
-        '[[div class="bullet"]]' + summaryLine + '[[/div]]';
-
-// ===== Evidence (bold): clear, one per line =====
-html += '[[div class="section-h"]][[strong]]Evidence Check:[[/strong]][[/div]]';
 if (evidenceLines.length) {
-  html += '[[ul style="margin:0 0 .5rem 1.25rem; padding:0;"]]' +
+  html += '[[ul style="margin:.25rem 0 .5rem 1.25rem; padding:0; font-size:.88rem;"]]' +
           evidenceLines.map(function(l){ return '[[li]]' + l + '[[/li]]'; }).join('') +
           '[[/ul]]';
-} else {
-  html += '[[div class="bullet"]][[em]]Not enough selected history yet to build an evidence list - keep saving more runs.[[/em]][[/div]]';
 }
 
-// Recommended numbers (chips) - same order logic
+// ===== BLOCK 2: MEANING =====
+html += '[[div class="section-h"]][[strong]]Meaning[[/strong]][[/div]]';
+html += '[[div class="bullet"]]' + posture + '[[/div]]';
+html += '[[div class="bullet"]][[em]]Probabilities, not guarantees.[[/em]][[/div]]';
+
+// ===== BLOCK 3: NEXT MOVE =====
+html += '[[div class="section-h"]][[strong]]Next Move[[/strong]][[/div]]';
+if (nextSteps && nextSteps.length) {
+  html += '[[ul style="margin:0 0 .5rem 1.25rem; padding:0;"]]';
+  nextSteps.slice(0, 3).forEach(function(s){
+    var safe = String(s == null ? '' : s).replace(/[<>]/g, '');
+    html += '[[li]]' + safe + '[[/li]]';
+  });
+  html += '[[/ul]]';
+} else {
+  html += '[[div class="bullet"]]Keep your current settings and save another run to build evidence.[[/div]]';
+}
+
+// Recommended chips (kept for decision support)
 if (finalMain.length){
-  html += '[[div class="bullet"]][[em]]Recommended mains (overlaps, method peaks, and mid-rank value):[[/em]][[/div]]' +
+  html += '[[div class="bullet"]][[em]]Recommended numbers (overlap + method peaks):[[/em]][[/div]]' +
           '[[div class="chips"]]';
   finalMain.forEach(function(n){ html += buildChip(n, provenanceFor(n)); });
   html += '[[/div]]';
 }
-
 if (recExtra.length){
   html += '[[div class="bullet"]][[em]]Recommended ' + (window.extraLabel || 'extras') + ':[[/em]][[/div]]' +
           '[[div class="chips"]]';
   recExtra.forEach(function(n){ html += buildChip(n, provenanceFor(n)); });
   html += '[[/div]]';
 }
-
-
-// ===== Recommendation (bold) =====
-var recText;
-if (mode === 'post') {
-  // Post-draw: use what just happened to tune the next selection
-  recText = '[[strong]]How to use this draw:[[/strong]] [[ol]]' +
-            '[[li]]Build your core from numbers that show up in more than one method -- when methods agree, that signal is stronger.[[/li]]' +
-            '[[li]]Focus on the high-scoring ranks where your methods scored (especially ranks #1-#5).[[/li]]' +
-            '[[li]]Do not only stack #1 picks -- keep some middle-rank numbers (#4-#10) in the mix for balance.[[/li]]' +
-            '[[/ol]] [[em]]This is guidance, not a guarantee -- it tilts your strategy toward the patterns that have been most consistent.[[/em]]';
-} else {
-  // Pre-draw: guidance before the next results land
-   recText = '[[strong]]For your upcoming selections:[[/strong]] [[ol]]' +
-             '[[li]]Start with numbers that more than one method agrees on -- overlap is your agreement signal.[[/li]]' +
-             '[[li]]Add numbers from the strong-rank positions in each method, not just the top rank.[[/li]]' +
-             '[[li]]Include middle-rank numbers (#4-#10) so your selection is not concentrated on only the highest picks.[[/li]]' +
-             '[[/ol]] [[em]]This is a structured guide, not a guarantee -- it tilts your strategy toward patterns that have been most consistent.[[/em]]';
-}
-
-html += '[[div class="section-h"]][[strong]]Recommendation:[[/strong]][[/div]]' +
-        '[[div class="bullet"]]' + recText + '[[/div]]';
 
 // =============================
 // SKAI Living Engine (per lottery)
@@ -7033,8 +7145,10 @@ if (snap) {
 }
 
 
-// Reset + baseline links (per lottery)
-html += '[[div class="bullet" style="margin-top:0.65rem;"]]';
+// Reset + baseline links (per lottery) - inside Advanced Tools details
+html += '[[details class="skai-adv-tools-details" style="margin-top:0.65rem;"]]';
+html += '[[summary class="skai-adv-tools-summary" aria-label="Advanced tools for this lottery"]]Advanced Tools[[/summary]]';
+html += '[[div class="skai-adv-tools-body"]]';
 html += '[[a href="#" data-skai-reset-learning="1" data-lottery-id="' + String(lotteryId) + '"';
 html += ' style="color:#6b7280; text-decoration:underline; font-size:0.9rem; margin-right:1rem;"';
 html += ' aria-label="Reset learning history for this lottery"';
@@ -7045,37 +7159,16 @@ html += ' style="color:#1C66FF; text-decoration:underline; font-size:0.9rem;"';
 html += ' aria-label="Set this run as baseline"';
 html += ']]Set this run as baseline[[/a]]';
 html += '[[/div]]';
+html += '[[/details]]';
 
 // Trend sentences (simple, ninth-grader readable)
 var trendAgreement = skaiTrendSentence(historyArr, 'overlapScore', 'Agreement');
 var trendEvidence  = skaiTrendSentence(historyArr, 'evidenceScore', 'Evidence');
 var trendConf      = skaiConfidenceTrend(historyArr);
 
-// Posture + next steps (mapped to existing user actions)
-var posture = skaiPosture(levelLabel, methodsUsed, overlapScore, evidenceScore);
-var nextSteps = skaiNextSteps(levelLabel, checked.length, methodsUsed, overlapScore, evidenceScore);
-
-// Append "Learning" sections to the narrative
-// Compact status strip (scan-friendly, no new logic)
-var statusLabel = 'Learning';
-if (String(levelLabel) === 'High') statusLabel = 'Aligned';
-else if (String(levelLabel) === 'Balanced') statusLabel = 'Stabilizing';
-else if (String(levelLabel) === 'Single-method') statusLabel = 'Exploring';
-
-html += '[[div class="skai-status-strip"]]';
-html += '[[div class="skai-status-left"]]';
-html += '[[span class="skai-status-dot dot-agreement"]][[/span]]';
-html += '[[span class="skai-status-dot dot-evidence"]][[/span]]';
-html += '[[span class="skai-status-dot dot-confidence"]][[/span]]';
-html += '[[span class="skai-status-text"]][[strong]]Status:[[/strong]] ' + statusLabel + '[[/span]]';
-html += '[[/div]]';
-html += '[[div class="skai-status-right"]]';
-html += '[[span class="skai-status-mini"]]Agreement: [[strong]]' + String(overlapScore) + '[[/strong]][[/span]]';
-html += '[[span class="skai-status-mini"]]Evidence: [[strong]]' + String(evidenceScore) + '[[/strong]][[/span]]';
-html += '[[/div]]';
-html += '[[/div]]';
-
-html += '[[div class="section-h"]][[strong]]Signals[[/strong]][[/div]]';
+// Append "Learning" delta section (how things changed since last run)
+// [SKAI-REF-04] Old status strip and duplicate "Signals" header removed; Signal block is now at top of narrative.
+html += '[[div class="section-h" style="margin-top:0.65rem;"]][[strong]]Learning Trends[[/strong]][[/div]]';
 
 
 
@@ -7180,24 +7273,7 @@ if (trendConf) {
   html += '[[div class="bullet"]]' + trendConf + '[[/div]]';
 }
 
-html += '[[div class="section-h"]][[strong]]Meaning[[/strong]][[/div]]' +
-        '[[div class="bullet"]]' + posture + '[[/div]]' +
-        '[[div class="bullet"]][[em]]Built on probabilities - not promises.[[/em]][[/div]]';
-
-
-html += '[[div class="section-h"]][[strong]]Next move:[[/strong]][[/div]]';
-
-if (nextSteps && nextSteps.length) {
-  html += '[[ul style="margin:0 0 .5rem 1.25rem; padding:0;"]]';
-  nextSteps.forEach(function(s){
-    var safe = String(s == null ? '' : s).replace(/[<>]/g, '');
-    html += '[[li]]' + safe + '[[/li]]';
-  });
-
-  html += '[[/ul]]';
-} else {
-  html += '[[div class="bullet"]][[em]]No changes suggested right now - this is a reasonable baseline.[[/em]][[/div]]';
-}
+// [SKAI-REF-04] Old duplicate Meaning + Next move sections removed; handled by 3-block structure at top.
 
 // Render structured narrative (Sorcerer [[..]] → HTML)
 // Also mark it as a live status region for assistive tech.
@@ -7381,21 +7457,162 @@ document.addEventListener('click', function(ev) {
 });
 
 // Restore collapsed state from localStorage on page load
+// Default: collapsed. Expand only if user previously expanded (stored as 'false').
 Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), function(group) {
   var lotteryId = group.getAttribute('data-lottery-id') || '';
   if (!lotteryId) return;
   var toggle = group.querySelector('.lottery-collapse-toggle');
   try {
-    if (localStorage.getItem('lottery_collapsed_' + lotteryId) === 'true') {
-      group.classList.add('collapsed');
+    var stored = localStorage.getItem('lottery_collapsed_' + lotteryId);
+    if (stored === 'false') {
+      // User previously expanded this lottery: restore expanded state
+      group.classList.remove('collapsed');
       if (toggle) {
-        toggle.textContent = 'Expand';
-        toggle.setAttribute('aria-expanded', 'false');
-        toggle.setAttribute('aria-label', 'Expand lottery section');
+        toggle.textContent = 'Collapse';
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.setAttribute('aria-label', 'Collapse lottery section');
       }
     }
+    // No stored value or stored = 'true': keep default collapsed (already set in HTML)
   } catch(e) {}
 });
+
+// =========================================================
+// [SKAI-REF-01] Global Strategic Snapshot computation
+// Reads from existing DOM to compute 6 metrics client-side.
+// =========================================================
+(function buildGlobalSnapshot(){
+  var sigEl   = document.getElementById('snap-signal-val');
+  var evEl    = document.getElementById('snap-evidence-val');
+  var trendEl = document.getElementById('snap-trend-val');
+  var bestLEl = document.getElementById('snap-best-lottery-val');
+  var bestMEl = document.getElementById('snap-best-method-val');
+  var cntEl   = document.getElementById('snap-lotteries-val');
+
+  var groups = document.querySelectorAll('.lottery-group[data-lottery-id]');
+  var totalLotteries = groups.length;
+
+  var allOverlap = 0;
+  var allEvidence = 0;
+  var methodHits = {};
+  var bestLotteryName = '';
+  var bestLotteryOverlap = -1;
+  var prevTotal = 0;
+
+  Array.prototype.forEach.call(groups, function(group) {
+    // Count compare checkboxes (evidence)
+    var boxes = group.querySelectorAll('.card-compare-checkbox');
+    var runCount = boxes.length;
+    allEvidence += runCount;
+
+    // Count match pills as a proxy for agreement signal
+    var matches = group.querySelectorAll('.match-pill:not(.extra)');
+    var overlap = matches.length;
+    allOverlap += overlap;
+
+    // Per-method hit counts
+    var cols = group.querySelectorAll('.prediction-column');
+    var maxMethodHits = 0;
+    var maxMethodLabel = '';
+    Array.prototype.forEach.call(cols, function(col) {
+      var badge = col.querySelector('.source-badge');
+      var label = badge ? (badge.textContent || '').trim().replace(/\s+/g,' ') : '';
+      var hits = col.querySelectorAll('.match-pill:not(.extra)').length;
+      methodHits[label] = (methodHits[label] || 0) + hits;
+      if (hits > maxMethodHits) { maxMethodHits = hits; maxMethodLabel = label; }
+    });
+
+    // Best lottery = highest overlap
+    if (overlap > bestLotteryOverlap) {
+      bestLotteryOverlap = overlap;
+      var nameEls = group.querySelectorAll('.lottery-name');
+      var parts = [];
+      Array.prototype.forEach.call(nameEls, function(el) {
+        var t = (el.textContent || '').trim();
+        if (t) parts.push(t);
+      });
+      bestLotteryName = parts.slice(-1).join('') || ('Group ' + group.getAttribute('data-lottery-id'));
+    }
+  });
+
+  // Signal Strength
+  var signal = 'Weak';
+  if (allOverlap >= 10) signal = 'Strong';
+  else if (allOverlap >= 5) signal = 'Structured';
+  else if (allOverlap >= 2) signal = 'Emerging';
+
+  // Evidence Depth
+  var evDepth = 'Thin';
+  if (allEvidence >= 10) evDepth = 'Stable';
+  else if (allEvidence >= 5) evDepth = 'Building';
+
+  // Trend Direction: compare current overlap to last stored value
+  var trendKey = 'skai_snap_prev_overlap';
+  var trendArrow = '\u2192 Flat';
+  try {
+    var prev = parseInt(localStorage.getItem(trendKey) || '0', 10);
+    if (allOverlap > prev + 1) trendArrow = '\u2191 Improving';
+    else if (allOverlap < prev - 1) trendArrow = '\u2193 Weakening';
+    localStorage.setItem(trendKey, String(allOverlap));
+  } catch(e) { /* localStorage unavailable (private browsing or quota exceeded) */ }
+
+  // Leading Method
+  var leadMethod = '--';
+  var maxH = 0;
+  // Reusable label truncation helper
+  var truncLabel = function(text, max) {
+    max = max || 22;
+    return text.length > max ? text.slice(0, max - 2) + '...' : text;
+  };
+  Object.keys(methodHits).forEach(function(k) {
+    if (methodHits[k] > maxH) { maxH = methodHits[k]; leadMethod = k; }
+  });
+  leadMethod = truncLabel(leadMethod);
+
+  // Update DOM
+  if (sigEl) sigEl.textContent = signal;
+  if (evEl) evEl.textContent = evDepth;
+  if (trendEl) trendEl.textContent = trendArrow;
+  if (bestLEl) {
+    bestLEl.textContent = truncLabel(bestLotteryName) || '--';
+  }
+  if (bestMEl) bestMEl.textContent = leadMethod;
+  if (cntEl) cntEl.textContent = String(totalLotteries);
+
+  // Mark best lottery group for focus mode
+  if (bestLotteryOverlap >= 0) {
+    Array.prototype.forEach.call(groups, function(group) {
+      var matches2 = group.querySelectorAll('.match-pill:not(.extra)').length;
+      if (matches2 === bestLotteryOverlap) {
+        group.classList.add('skai-focus-winner');
+      }
+    });
+  }
+})();
+
+// =========================================================
+// [SKAI-REF-05] Focus Mode Toggle
+// =========================================================
+(function initFocusMode(){
+  var btn = document.getElementById('skai-focus-btn');
+  if (!btn) return;
+
+  var body = document.body;
+  var isOn = false;
+
+  btn.addEventListener('click', function() {
+    isOn = !isOn;
+    if (isOn) {
+      body.classList.add('skai-focus-on');
+      btn.setAttribute('aria-pressed', 'true');
+      btn.textContent = 'Exit Focus Mode';
+    } else {
+      body.classList.remove('skai-focus-on');
+      btn.setAttribute('aria-pressed', 'false');
+      btn.textContent = 'Focus on Best Opportunity';
+    }
+  });
+})();
 
 // close the top-level DOMContentLoaded wrapper opened at the start of this script
 });
@@ -7612,34 +7829,6 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
     }, 2000);
   }
 [[/script]]
-[[script]]
-document.addEventListener('DOMContentLoaded', function () {
-  // Event delegation: one handler for all collapse buttons
-  document.addEventListener('click', function (ev) {
-    var btn = ev.target;
-
-    // If user clicks inside the button (like a span), walk up to the button
-    if (btn && btn.classList && !btn.classList.contains('lottery-collapse-toggle')) {
-      btn = btn.closest ? btn.closest('.lottery-collapse-toggle') : null;
-    }
-
-    if (!btn || !btn.classList || !btn.classList.contains('lottery-collapse-toggle')) return;
-
-    ev.preventDefault();
-
-    var group = btn.closest ? btn.closest('.lottery-group') : null;
-    if (!group) return;
-
-    var isCollapsed = group.classList.toggle('collapsed');
-
-    // aria-expanded should be true when content is visible
-    btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
-
-    // Keep label stable, ASCII-only
-    // If you want a chevron, do it with CSS background or a separate element, not text glyphs.
-    btn.textContent = isCollapsed ? 'Expand' : 'Collapse';
-  });
-});
-[[/script]]
+<!-- [SKAI-REF-02d] Duplicate collapse handler removed; handled by main DOMContentLoaded -->
 
 {/source}
