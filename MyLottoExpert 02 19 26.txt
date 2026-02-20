@@ -604,6 +604,28 @@ echo '{loadmoduleid 126}';
   font-style: italic;
   margin-top: 0.1rem;
 }
+/* [SKAI-SINGLE-RUN-02] Single-run winner label */
+.skai-opp-card__run-label {
+  font-size: 0.72rem;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 2px 8px;
+  display: inline-block;
+  margin-top: 0.3rem;
+}
+.skai-opp-card__see-runs {
+  font-size: 0.72rem;
+  color: #1C66FF;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  margin-top: 0.2rem;
+  display: inline-block;
+}
 .skai-opp-card__actions {
   display: flex;
   flex-wrap: wrap;
@@ -1685,41 +1707,55 @@ foreach ($groups as $groupKey => $g) {
     }
     $bestOpps[$lid]['total_runs'] += count($g['preds']);
 
-    // ── Agreement: count unique numbers that appear in 2+ methods ──
-    $methodNums = [];
+    // ── Agreement: per-run scoring (SKAI-SINGLE-RUN-01) ──
+    // For each run, score = how many of its numbers also appear in at least
+    // one run from a DIFFERENT method source. The winner is the single run
+    // with the highest such score. We never union numbers across runs.
+    //
+    // Step 1: build a pool of numbers per source across all runs in this group.
+    $allSourceNumPool = [];
     foreach ($g['preds'] as $s) {
-        $raw = array_filter(array_map('intval', explode(',', (string)($s->main_numbers ?? ''))));
-        foreach ($raw as $n) {
-            if (!isset($methodNums[$n])) $methodNums[$n] = [];
-            $methodNums[$n][] = $s->source;
-        }
+        $src  = (string)$s->source;
+        $nums = array_filter(array_map('intval', explode(',', (string)($s->main_numbers ?? ''))));
+        if (!isset($allSourceNumPool[$src])) $allSourceNumPool[$src] = [];
+        foreach ($nums as $n) $allSourceNumPool[$src][$n] = true;
     }
-    $agreedNums = [];
-    $agreedMethodSet = [];
-    foreach ($methodNums as $n => $ms) {
-        $uniq = array_unique($ms);
-        if (count($uniq) >= 2) {
-            $agreedNums[] = $n;
-            foreach ($uniq as $m) $agreedMethodSet[$m] = true;
+    // Step 2: score each run individually.
+    foreach ($g['preds'] as $s) {
+        $src    = (string)$s->source;
+        $myNums = array_filter(array_map('intval', explode(',', (string)($s->main_numbers ?? ''))));
+        // Collect numbers and source names from OTHER methods (not this run's source).
+        $otherNums    = [];
+        $otherSrcList = [];
+        foreach ($allSourceNumPool as $otherSrc => $numSet) {
+            if ($otherSrc !== $src) {
+                foreach ($numSet as $n => $_) $otherNums[$n] = true;
+                $otherSrcList[] = $otherSrc;
+            }
         }
-    }
-    $agreementScore = count($agreedNums);
-    // Tie-break: more agreed methods wins; newer draw date wins
-    $prevScore  = $bestOpps[$lid]['best_agreement']['score'];
-    $prevMCount = count($bestOpps[$lid]['best_agreement']['methods']);
-    $currMCount = count($agreedMethodSet);
-    if ($agreementScore > $prevScore || ($agreementScore === $prevScore && $currMCount > $prevMCount)) {
-        // Pick any run in this group as the representative run for "save best"
-        $repRun = $g['preds'][0] ?? null;
-        sort($agreedNums);
-        $bestOpps[$lid]['best_agreement'] = [
-            'score'     => $agreementScore,
-            'draw_date' => (string)$g['draw_date'],
-            'numbers'   => $agreedNums,
-            'methods'   => array_keys($agreedMethodSet),
-            'run_id'    => $repRun ? (int)$repRun->id : 0,
-            'source'    => $repRun ? (string)$repRun->source : '',
-        ];
+        $otherSrcList = array_unique($otherSrcList);
+        // Agreed = numbers in THIS run that also exist in another method's pool.
+        $agreed = [];
+        foreach ($myNums as $n) {
+            if (isset($otherNums[$n])) $agreed[] = $n;
+        }
+        $score = count($agreed);
+        $prev  = $bestOpps[$lid]['best_agreement'];
+        // Tie-break: more agreed methods, then newer draw_date, then higher run id.
+        $isBetter = ($score > $prev['score'])
+            || ($score === $prev['score'] && count($otherSrcList) > count($prev['methods']))
+            || ($score === $prev['score'] && count($otherSrcList) === count($prev['methods']) && (int)$s->id > (int)$prev['run_id']);
+        if ($isBetter) {
+            sort($agreed);
+            $bestOpps[$lid]['best_agreement'] = [
+                'score'     => $score,
+                'draw_date' => (string)$g['draw_date'],
+                'numbers'   => $agreed,
+                'methods'   => $otherSrcList,
+                'run_id'    => (int)$s->id,
+                'source'    => $src,
+            ];
+        }
     }
 
     // ── Coverage: individual run with most unique main numbers ──
@@ -2598,7 +2634,8 @@ h3.title { font-size: 1.5rem; }
     ?>
     [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.1rem;"]]
       [[span class="skai-opp-card__badge skai-opp-card__badge--agree"]]Best Agreement[[/span]]
-      [[div class="skai-opp-card__def"]]Agreement means multiple methods picked the same numbers.[[/div]]
+      [[div class="skai-opp-card__def"]]More methods picked the same number.[[/div]]
+      [[div class="skai-opp-card__run-label"]]Best single run (picked from <?php echo $totalRuns; ?> saved run<?php echo $totalRuns === 1 ? '' : 's'; ?>)[[/div]]
       <?php if ($ba['score'] > 0): ?>
         [[div class="skai-opp-card__metric"]]<?php echo (int)$ba['score']; ?> shared number<?php echo $ba['score'] === 1 ? '' : 's'; ?>[[/div]]
         [[div class="skai-opp-card__label"]]from <?php echo count($ba['methods']); ?> method<?php echo count($ba['methods']) === 1 ? '' : 's'; ?> on <?php echo htmlspecialchars($ba['draw_date'], ENT_QUOTES); ?>[[/div]]
@@ -2620,7 +2657,7 @@ h3.title { font-size: 1.5rem; }
           <?php if (count($ba['numbers']) > 15): ?><span style="font-size:0.75rem;color:#94a3b8;">+<?php echo count($ba['numbers'])-15; ?> more</span><?php endif; ?>
         [[/div]]
         <?php endif; ?>
-        [[div class="skai-opp-card__why"]]Why: These numbers had the most votes from different methods.[[/div]]
+        [[div class="skai-opp-card__why"]]Why: These are the numbers from this one run that other methods also picked.[[/div]]
         <?php if ($ba['run_id'] > 0): ?>
         [[div class="skai-opp-card__actions"]]
           [[button type="button" class="skai-opp-card__cta skai-opp-card__cta--primary"
@@ -2642,6 +2679,11 @@ h3.title { font-size: 1.5rem; }
               Save as Best Settings
             [[/button]]
           [[/form]]
+          [[button type="button" class="skai-opp-card__see-runs"
+                   data-use-settings="1"
+                   data-lottery-id="<?php echo $lid; ?>"
+                   data-run-id="0"
+                   aria-label="See all saved runs for this lottery"]]See other runs[[/button]]
         [[/div]]
         <?php endif; ?>
       <?php else: ?>
@@ -2656,7 +2698,8 @@ h3.title { font-size: 1.5rem; }
     ?>
     [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.6rem;"]]
       [[span class="skai-opp-card__badge skai-opp-card__badge--cover"]]Best Coverage[[/span]]
-      [[div class="skai-opp-card__def"]]Coverage means how many unique numbers your settings produced.[[/div]]
+      [[div class="skai-opp-card__def"]]How many unique numbers this one run gives you.[[/div]]
+      [[div class="skai-opp-card__run-label"]]Best single run (picked from <?php echo $totalRuns; ?> saved run<?php echo $totalRuns === 1 ? '' : 's'; ?>)[[/div]]
       <?php if ($bc['score'] > 0): ?>
         [[div class="skai-opp-card__metric"]]<?php echo (int)$bc['score']; ?> unique number<?php echo $bc['score'] === 1 ? '' : 's'; ?>[[/div]]
         [[div class="skai-opp-card__label"]]<?php echo htmlspecialchars($__methodLabels[$bc['source']] ?? $bc['source'], ENT_QUOTES); ?> &bull; <?php echo htmlspecialchars($bc['draw_date'], ENT_QUOTES); ?>[[/div]]
@@ -2668,7 +2711,7 @@ h3.title { font-size: 1.5rem; }
           <?php if (count($bc['numbers']) > 12): ?><span style="font-size:0.75rem;color:#94a3b8;">+<?php echo count($bc['numbers'])-12; ?> more</span><?php endif; ?>
         [[/div]]
         <?php endif; ?>
-        [[div class="skai-opp-card__why"]]Why: This run produced the most unique numbers to choose from.[[/div]]
+        [[div class="skai-opp-card__why"]]Why: This one run produced the most unique numbers to choose from.[[/div]]
         [[div class="skai-opp-card__actions"]]
           [[button type="button" class="skai-opp-card__cta skai-opp-card__cta--primary"
                    data-use-settings="1"
@@ -2689,6 +2732,11 @@ h3.title { font-size: 1.5rem; }
               Save as Best Settings
             [[/button]]
           [[/form]]
+          [[button type="button" class="skai-opp-card__see-runs"
+                   data-use-settings="1"
+                   data-lottery-id="<?php echo $lid; ?>"
+                   data-run-id="0"
+                   aria-label="See all saved runs for this lottery"]]See other runs[[/button]]
         [[/div]]
       <?php else: ?>
         [[div class="skai-opp-card__metric"]]No runs yet[[/div]]
@@ -2701,11 +2749,12 @@ h3.title { font-size: 1.5rem; }
     ?>
     [[div style="border-top:1px solid #f1f5f9; padding-top:0.6rem; margin-top:0.6rem;"]]
       [[span class="skai-opp-card__badge skai-opp-card__badge--rank"]]Best Rank Strength[[/span]]
-      [[div class="skai-opp-card__def"]]Rank strength means your winning hits appeared earlier in your list (closer to #1).[[/div]]
+      [[div class="skai-opp-card__def"]]How early the hits showed up in your list (closer to #1 = stronger).[[/div]]
+      [[div class="skai-opp-card__run-label"]]Best single run (picked from <?php echo $totalRuns; ?> saved run<?php echo $totalRuns === 1 ? '' : 's'; ?>)[[/div]]
       <?php if ($br['score'] > 0): ?>
         [[div class="skai-opp-card__metric"]]<?php echo (int)$br['hits']; ?> hit<?php echo $br['hits'] === 1 ? '' : 's'; ?> at top ranks[[/div]]
         [[div class="skai-opp-card__label"]]<?php echo htmlspecialchars($__methodLabels[$br['source']] ?? $br['source'], ENT_QUOTES); ?> &bull; <?php echo htmlspecialchars($br['draw_date'], ENT_QUOTES); ?>[[/div]]
-        [[div class="skai-opp-card__why"]]Why: This run matched actual draw numbers closer to the top of the list.[[/div]]
+        [[div class="skai-opp-card__why"]]Why: This one run matched actual draw numbers closer to the top of the list.[[/div]]
         [[div class="skai-opp-card__actions"]]
           [[button type="button" class="skai-opp-card__cta skai-opp-card__cta--primary"
                    data-use-settings="1"
@@ -2726,6 +2775,11 @@ h3.title { font-size: 1.5rem; }
               Save as Best Settings
             [[/button]]
           [[/form]]
+          [[button type="button" class="skai-opp-card__see-runs"
+                   data-use-settings="1"
+                   data-lottery-id="<?php echo $lid; ?>"
+                   data-run-id="0"
+                   aria-label="See all saved runs for this lottery"]]See other runs[[/button]]
         [[/div]]
       <?php else: ?>
         [[div class="skai-opp-card__metric"]]Not enough data yet[[/div]]
