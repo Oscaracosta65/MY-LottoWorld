@@ -418,6 +418,7 @@ echo '{loadmoduleid 126}';
 /* [SKAI-REF-06] Advanced Tools Details */
 .skai-adv-tools-details {
   display: inline-block;
+  position: relative;
 }
 .skai-adv-tools-summary {
   cursor: pointer;
@@ -2318,6 +2319,8 @@ h3.title { font-size: 1.5rem; }
   $meta     = $lottoMetaById[$g['lottery_id']] ?? [];
   $state    = $meta['state'] ?? '';
   $country  = $meta['country'] ?? '';
+  // Compute a safe HTML-ID fragment for this group's collapsible content
+  $__lcId   = 'lc-' . (int)$g['lottery_id'] . '-' . preg_replace('/[^a-z0-9]/i', '-', (string)($g['draw_date'] ?? ''));
 ?>
 
 [[div class="lottery-group card skai-card collapsed" data-lottery-id="<?php echo (int)$g['lottery_id']; ?>-<?php echo htmlspecialchars($g['draw_date'], ENT_QUOTES); ?>"]]
@@ -2422,12 +2425,13 @@ h3.title { font-size: 1.5rem; }
     [[button type="button" class="lottery-collapse-toggle btn-secondary" 
              style="padding:0.35rem 0.75rem; font-size:0.8rem; white-space:nowrap;"
              aria-expanded="false"
-             aria-label="Expand lottery section"]]
+             aria-label="Expand lottery section"
+             aria-controls="<?php echo htmlspecialchars($__lcId, ENT_QUOTES); ?>"]]
       Expand
     [[/button]]
   [[/div]]
   
-  [[div class="lottery-collapsible-content"]]
+  [[div class="lottery-collapsible-content" id="<?php echo htmlspecialchars($__lcId, ENT_QUOTES); ?>"]]
 
       <?php
         // ──────────────────────────────────────────────────────────────
@@ -4913,7 +4917,17 @@ if (!empty($settingLabels)) {
 
         <?php endforeach; ?>
       [[/div]]  <!-- end .predictions-row -->
-      
+
+      <?php /* [SKAI-REF-04] Narrative container: JS renders Signal/Meaning/Next Move blocks here.
+              $__drawRow is truthy (array) or false/null - ternary outputs only the literal strings
+              'post' or 'pre', which are safe values for this data attribute. */ ?>
+      [[div class="narrative-card" data-narrative
+           data-mode="<?php echo ($__drawRow) ? 'post' : 'pre'; ?>"
+           style="margin:1rem 0 0.5rem; padding:0.85rem 1rem; border-radius:10px; background:#f8fafc; border:1px solid #e3e7ef;"
+           role="status" aria-live="polite"
+           aria-label="Analysis narrative for this draw"]]
+      [[/div]]
+
     [[/div]]  <!-- end .lottery-collapsible-content -->
     [[/div]]  <!-- end .lottery-group -->
   <?php endforeach; ?>
@@ -7517,6 +7531,7 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
     Array.prototype.forEach.call(cols, function(col) {
       var badge = col.querySelector('.source-badge');
       var label = badge ? (badge.textContent || '').trim().replace(/\s+/g,' ') : '';
+      if (!label) return; // skip columns with no method label
       var hits = col.querySelectorAll('.match-pill:not(.extra)').length;
       methodHits[label] = (methodHits[label] || 0) + hits;
       if (hits > maxMethodHits) { maxMethodHits = hits; maxMethodLabel = label; }
@@ -7579,12 +7594,15 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
   if (bestMEl) bestMEl.textContent = leadMethod;
   if (cntEl) cntEl.textContent = String(totalLotteries);
 
-  // Mark best lottery group for focus mode
+  // Mark best lottery group for focus mode (only the first/single best group)
   if (bestLotteryOverlap >= 0) {
+    var winnerMarked = false;
     Array.prototype.forEach.call(groups, function(group) {
+      if (winnerMarked) return;
       var matches2 = group.querySelectorAll('.match-pill:not(.extra)').length;
       if (matches2 === bestLotteryOverlap) {
         group.classList.add('skai-focus-winner');
+        winnerMarked = true;
       }
     });
   }
@@ -7592,6 +7610,8 @@ Array.prototype.forEach.call(document.querySelectorAll('.lottery-group'), functi
 
 // =========================================================
 // [SKAI-REF-05] Focus Mode Toggle
+// Note: Focus mode state intentionally does NOT persist across page loads.
+// It is a temporary UI overlay and resets on refresh.
 // =========================================================
 (function initFocusMode(){
   var btn = document.getElementById('skai-focus-btn');
