@@ -2900,15 +2900,19 @@ h3.title { font-size: 1.5rem; }
       [[span class="skai-opp-card__badge skai-opp-card__badge--rank"]]Best Rank Strength[[/span]]
       [[div class="skai-opp-card__def"]]How early the hits showed up in your list (closer to #1 = stronger).[[/div]]
       [[div class="skai-opp-card__run-label"]]Best single run (picked from <?php echo $totalRuns; ?> saved run<?php echo $totalRuns === 1 ? '' : 's'; ?>)[[/div]]
-      <?php if ($br['score'] > 0): ?>
+      <?php if ($br['score'] >= 0): // [SKAI-FIX-01] score>=0 means draw exists (even 0 hits); score<0 = no draw found ?>
 	  [[div class="skai-opp-card__metric"]]
+		<?php if ((int)$br['hits'] === 0 && empty($br['extra_hits'])): ?>
+		0 hits (no matches found)
+		<?php else: ?>
 		<?php echo (int)$br['hits']; ?> main hit<?php echo ((int)$br['hits'] === 1) ? '' : 's'; ?>
 		<?php if (!empty($br['extra_hits'])): ?>
 		&nbsp;+&nbsp;<?php echo (int)$br['extra_hits']; ?> extra ball hit
 		<?php endif; ?>
+		<?php endif; ?>
 	  [[/div]]
         [[div class="skai-opp-card__label"]]<?php echo htmlspecialchars($__methodLabels[$br['source']] ?? $br['source'], ENT_QUOTES); ?> &bull; <?php echo htmlspecialchars($br['draw_date'], ENT_QUOTES); ?>[[/div]]
-        [[div class="skai-opp-card__why"]]Why: This one run matched actual draw numbers closer to the top of the list.[[/div]]
+        [[div class="skai-opp-card__why"]]<?php if ((int)$br['hits'] === 0 && empty($br['extra_hits'])): ?>Draw results exist but none of the predicted numbers matched.<?php else: ?>Why: This one run matched actual draw numbers closer to the top of the list.<?php endif; ?>[[/div]]
         [[div class="skai-opp-card__actions"]]
           [[button type="button" class="skai-opp-card__cta skai-opp-card__cta--primary"
                    data-use-settings="1"
@@ -2935,9 +2939,9 @@ h3.title { font-size: 1.5rem; }
                    data-run-id="0"
                    aria-label="See all saved runs for this lottery"]]See other runs[[/button]]
         [[/div]]
-      <?php else: ?>
-        [[div class="skai-opp-card__metric"]]Not enough data yet[[/div]]
-        [[div class="skai-opp-card__label"]]Rank strength needs actual draw results.[[/div]]
+      <?php else: // [SKAI-FIX-01] score<0 = no official draw row found for this date ?>
+        [[div class="skai-opp-card__metric"]]Waiting for official results[[/div]]
+        [[div class="skai-opp-card__label"]]Official draw results for this date have not been recorded yet.[[/div]]
       <?php endif; ?>
     [[/div]]
 
@@ -5491,13 +5495,20 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
      . htmlspecialchars($__tsStr, ENT_QUOTES)
      . '[[/em]][[/div]]';
 
+  // [SKAI-FIX-02] Method/source always shown so panel is never empty
+  $__methodLabel = $__methodLabels[$src] ?? $src;
+  echo '[[div class="setting-row"]]'
+     . '[[strong]]Method:[[/strong]] '
+     . htmlspecialchars($__methodLabel, ENT_QUOTES)
+     . '[[/div]]';
+
 // now render the grid
 if (!empty($settingLabels)) {
   echo '[[div class="settings-grid"]]';
 
   // Prefer JSON settings payload when present (prevents "Epochs = 0" when values are saved in JSON).
   $rawSettingsJson = null;
-  foreach (['settings_json','settings','params_json','params'] as $__k) {
+  foreach (['settings_json','settings','params_json','params','meta_json','config_json'] as $__k) {
     if (isset($s->$__k) && $s->$__k !== null && $s->$__k !== '') {
       $rawSettingsJson = (string)$s->$__k;
       break;
@@ -5517,12 +5528,13 @@ if (!empty($settingLabels)) {
       $val = $decodedSettings[$prop];
     }
 
-    if ($val !== null && $val !== '') {
-      echo '[[div class="setting-row"]]'
-         . '[[strong]]' . htmlspecialchars($settingLabel, ENT_QUOTES) . ':[[/strong]] '
-         . htmlspecialchars((string)$val, ENT_QUOTES)
-         . '[[/div]]';
-    }
+    // [SKAI-FIX-02] Always show row; show (not saved) when value is absent
+    // Note: '<em>(not saved)</em>' is a hardcoded constant, not user data - safe to echo raw.
+    $__displayVal = ($val !== null && $val !== '') ? htmlspecialchars((string)$val, ENT_QUOTES) : '<em>(not saved)</em>';
+    echo '[[div class="setting-row"]]'
+       . '[[strong]]' . htmlspecialchars($settingLabel, ENT_QUOTES) . ':[[/strong]] '
+       . $__displayVal
+       . '[[/div]]';
   }
 
   // SKAI "mode" (Profile / Strategy / Blend) - show if present in JSON
@@ -5596,7 +5608,44 @@ if (!empty($settingLabels)) {
 
   echo '[[/div]]';
 } else {
-    echo '[[em]]No advanced settings were saved for this run.[[/em]]';
+    // [SKAI-FIX-02] For source types without predefined labels, render any available JSON settings
+    $rawSettingsJson = null;
+    foreach (['settings_json','settings','params_json','params','meta_json','config_json'] as $__k) {
+        if (isset($s->$__k) && $s->$__k !== null && $s->$__k !== '') {
+            $rawSettingsJson = (string)$s->$__k;
+            break;
+        }
+    }
+    $__genericSettings = [];
+    if ($rawSettingsJson) {
+        $__parsed = json_decode($rawSettingsJson, true);
+        if (is_array($__parsed)) $__genericSettings = $__parsed;
+    }
+    if (!empty($__genericSettings)) {
+        $__friendlyKeys = [
+            'draw_window'    => 'History used',
+            'epochs'         => 'Training rounds',
+            'walks'          => 'Search steps',
+            'numbers_count'  => 'Numbers generated',
+            'history_length' => 'History length',
+            'iterations'     => 'Iterations',
+            'seed'           => 'Seed',
+            'model'          => 'Model',
+        ];
+        echo '[[div class="settings-grid"]]';
+        foreach ($__genericSettings as $__gk => $__gv) {
+            if (is_scalar($__gv)) {
+                $__label = $__friendlyKeys[$__gk] ?? ucwords(str_replace('_', ' ', (string)$__gk));
+                echo '[[div class="setting-row"]]'
+                   . '[[strong]]' . htmlspecialchars($__label, ENT_QUOTES) . ':[[/strong]] '
+                   . htmlspecialchars((string)$__gv, ENT_QUOTES)
+                   . '[[/div]]';
+            }
+        }
+        echo '[[/div]]';
+    } else {
+        echo '[[em]]No advanced settings were saved for this run.[[/em]]';
+    }
 }
 
 ?>
